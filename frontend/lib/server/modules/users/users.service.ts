@@ -86,7 +86,7 @@ export class UsersService {
       select: USER_SELECT,
     });
 
-    createAuditLog({
+    await createAuditLog({
       userId: actorId,
       userName: actorName,
       userRole: actorRole,
@@ -125,7 +125,7 @@ export class UsersService {
       select: USER_SELECT,
     });
 
-    createAuditLog({
+    await createAuditLog({
       userId: actorId,
       userName: actorName,
       userRole: actorRole,
@@ -166,7 +166,7 @@ export class UsersService {
       select: USER_SELECT,
     });
 
-    createAuditLog({
+    await createAuditLog({
       userId: actorId,
       userName: actorName,
       userRole: actorRole,
@@ -197,7 +197,7 @@ export class UsersService {
 
     await prisma.user.delete({ where: { id } });
 
-    createAuditLog({
+    await createAuditLog({
       userId: actorId,
       userName: actorName,
       userRole: actorRole,

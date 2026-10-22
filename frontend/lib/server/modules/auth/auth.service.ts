@@ -43,7 +43,7 @@ export class AuthService {
     const accessToken = generateAccessToken(jwtPayload);
     const refreshToken = generateRefreshToken(jwtPayload);
 
-    createAuditLog({
+    await createAuditLog({
       userId: user.id,
       userName: user.name,
       userRole: user.role,
@@ -94,7 +94,7 @@ export class AuthService {
     const accessToken = generateAccessToken(jwtPayload);
     const refreshToken = generateRefreshToken(jwtPayload);
 
-    createAuditLog({
+    await createAuditLog({
       userId: user.id,
       userName: user.name,
       userRole: user.role,

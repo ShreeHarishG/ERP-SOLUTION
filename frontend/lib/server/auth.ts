@@ -35,3 +35,13 @@ export async function requireRole(...roles: string[]): Promise<JwtPayload | Next
 export function isErrorResponse(value: unknown): value is NextResponse {
   return value instanceof Response;
 }
+
+export async function getCurrentUser(_request?: any): Promise<JwtPayload | null> {
+  try {
+    const token = await getAccessToken();
+    if (!token) return null;
+    return verifyAccessToken(token);
+  } catch {
+    return null;
+  }
+}

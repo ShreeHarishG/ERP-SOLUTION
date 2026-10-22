@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '@/services/dashboard.api';
 
-export const useDashboard = () => {
+export const useDashboard = (role?: string) => {
   const useStats = () => {
     return useQuery({
-      queryKey: ['dashboardStats'],
-      queryFn: () => dashboardApi.getStats(),
+      queryKey: ['dashboardStats', role],
+      queryFn: () => dashboardApi.getStats(role),
       staleTime: 5 * 60 * 1000,
     });
   };

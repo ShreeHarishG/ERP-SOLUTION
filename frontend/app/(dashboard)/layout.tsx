@@ -6,9 +6,14 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import Topbar from '@/components/layout/Topbar';
-import { AiAssistant } from '@/components/ai/AiAssistant';
+import dynamic from 'next/dynamic';
 import { Loader2, ShieldAlert, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+
+const AiAssistant = dynamic(
+  () => import('@/components/ai/AiAssistant').then((m) => m.AiAssistant),
+  { ssr: false }
+);
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, useGetMe, user } = useAuth();

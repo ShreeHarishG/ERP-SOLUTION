@@ -3,12 +3,18 @@ import { requireAuth, isErrorResponse } from '@/lib/server/auth';
 import { jsonSuccess } from '@/lib/server/api-response';
 import { handleRoute } from '@/lib/server/handle-route';
 
-export async function GET() {
+import { NextRequest } from 'next/server';
+
+export async function GET(request: NextRequest) {
   return handleRoute(async () => {
     const user = await requireAuth();
     if (isErrorResponse(user)) return user;
 
-    const stats = await dashboardService.getStats();
+    const { searchParams } = new URL(request.url);
+    const requestedRole = searchParams.get('role');
+    const effectiveRole = (user.role === 'admin' && requestedRole) ? requestedRole : user.role;
+
+    const stats = await dashboardService.getStats(effectiveRole);
     return jsonSuccess(stats, 'Dashboard stats fetched');
   });
 }

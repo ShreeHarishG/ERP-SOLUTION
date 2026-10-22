@@ -80,8 +80,9 @@ export interface DashboardStats {
 }
 
 export const dashboardApi = {
-  getStats: async (): Promise<DashboardStats> => {
-    const res = await api.get<{ data: DashboardStats }>('/dashboard/stats');
+  getStats: async (role?: string): Promise<DashboardStats> => {
+    const url = role ? `/dashboard/stats?role=${encodeURIComponent(role)}` : '/dashboard/stats';
+    const res = await api.get<{ data: DashboardStats }>(url);
     return res.data.data;
   },
 };
