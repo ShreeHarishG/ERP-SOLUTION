@@ -5,12 +5,16 @@ import { jsonSuccess, jsonError } from '@/lib/server/api-response';
 import { handleRoute } from '@/lib/server/handle-route';
 import type { UserRole } from '@prisma/client';
 
-export async function GET() {
+export async function GET(request: Request) {
   return handleRoute(async () => {
     const user = await requireAuth();
     if (isErrorResponse(user)) return user;
 
-    const boms = await bomsService.list();
+    const url = new URL(request.url);
+    const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10), 1), 100);
+    const skip = Math.max(parseInt(url.searchParams.get('skip') || '0', 10), 0);
+
+    const boms = await bomsService.list({ limit, skip });
     return jsonSuccess(boms, 'BOMs fetched successfully');
   });
 }

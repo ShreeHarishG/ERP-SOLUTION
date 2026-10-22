@@ -4,19 +4,34 @@ import { generateManufacturingOrderNumber } from '@/lib/server/utils/order-numbe
 import { bomsService } from '../boms/boms.service';
 import type { UserRole } from '@prisma/client';
 
-async function mapMOStatus(mo: any) {
+function mapMOStatus(mo: any) {
   if (mo && mo.status === 'confirmed') {
-    // Check component availability
-    const bomExplosion = await bomsService.explode(mo.productId, Number(mo.quantityToProduce));
-    const hasShortages = bomExplosion.materials.some((mat) => mat.shortage > 0);
+    // Check component availability in-memory from already joined relations (eliminating N+1 database queries)
+    let hasShortages = false;
+    const qtyToProduce = Number(mo.quantityToProduce || 1);
+    const bomItems = mo.bom?.items || [];
+
+    for (const item of bomItems) {
+      const required = Number(item.quantity) * qtyToProduce;
+      const component = item.component;
+      if (component) {
+        const free = Math.max(0, Number(component.onHandQuantity) - Number(component.reservedQuantity));
+        if (free < required) {
+          hasShortages = true;
+          break;
+        }
+      }
+    }
     mo.status = hasShortages ? 'WAITING_FOR_PROCUREMENT' : 'READY_TO_START';
   }
   return mo;
 }
 
 export class ManufacturingService {
-  async list() {
+  async list(limit = 50, skip = 0) {
     const orders = await prisma.manufacturingOrder.findMany({
+      take: limit,
+      skip,
       include: {
         product: true,
         bom: {
@@ -34,7 +49,7 @@ export class ManufacturingService {
       orderBy: { createdAt: 'desc' },
     });
 
-    return Promise.all(orders.map(mapMOStatus));
+    return orders.map(mapMOStatus);
   }
 
   async getById(id: string) {

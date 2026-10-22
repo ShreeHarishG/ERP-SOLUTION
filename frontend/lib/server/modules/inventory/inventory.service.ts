@@ -14,7 +14,7 @@ export class InventoryService {
     });
   }
 
-  async movementsLedger(productId?: string) {
+  async movementsLedger(productId?: string, limit = 50, skip = 0) {
     const where: Record<string, any> = {};
     if (productId) {
       where.productId = productId;
@@ -22,6 +22,8 @@ export class InventoryService {
 
     return prisma.inventoryMovement.findMany({
       where,
+      take: limit,
+      skip,
       include: {
         product: true,
         creator: { select: { name: true } },
@@ -36,32 +38,37 @@ export class InventoryService {
     actorName: string,
     actorRole: UserRole,
   ) {
-    const product = await prisma.product.findUnique({
-      where: { id: dto.productId },
-    });
-
-    if (!product) {
-      throw Object.assign(new Error('Product not found'), { statusCode: 404 });
-    }
-
-    const onHand = Number(product.onHandQuantity);
-    const reserved = Number(product.reservedQuantity);
-    const newOnHand = onHand + dto.quantity;
-
-    if (newOnHand < 0) {
-      throw Object.assign(new Error('Physical stock cannot be adjusted below zero'), {
-        statusCode: 400,
-      });
-    }
-
-    if (newOnHand < reserved) {
-      throw Object.assign(
-        new Error(`Cannot adjust stock below reservation commitments. Minimum required: ${reserved}`),
-        { statusCode: 400 }
-      );
-    }
-
     const result = await prisma.$transaction(async (tx) => {
+      // P0 Concurrency Protection: Row-level lock (FOR UPDATE)
+      const products = await tx.$queryRaw<any[]>`
+        SELECT id, name, on_hand_quantity as "onHandQuantity", reserved_quantity as "reservedQuantity"
+        FROM products
+        WHERE id = ${dto.productId}::uuid
+        FOR UPDATE
+      `;
+
+      const product = products[0];
+      if (!product) {
+        throw Object.assign(new Error('Product not found'), { statusCode: 404 });
+      }
+
+      const onHand = Number(product.onHandQuantity);
+      const reserved = Number(product.reservedQuantity);
+      const newOnHand = onHand + dto.quantity;
+
+      if (newOnHand < 0) {
+        throw Object.assign(new Error('Physical stock cannot be adjusted below zero'), {
+          statusCode: 400,
+        });
+      }
+
+      if (newOnHand < reserved) {
+        throw Object.assign(
+          new Error(`Cannot adjust stock below reservation commitments. Minimum required: ${reserved}`),
+          { statusCode: 400 }
+        );
+      }
+
       const updatedProduct = await tx.product.update({
         where: { id: dto.productId },
         data: { onHandQuantity: newOnHand },
@@ -86,7 +93,7 @@ export class InventoryService {
         },
       });
 
-      return { product: updatedProduct, movement };
+      return { product: updatedProduct, movement, originalProduct: product, newOnHand };
     });
 
     await createAuditLog({
@@ -95,16 +102,16 @@ export class InventoryService {
       userRole: actorRole,
       action: 'stock_adjusted',
       entityType: 'product',
-      entityId: product.id,
-      entityName: product.name,
+      entityId: result.originalProduct.id,
+      entityName: result.originalProduct.name,
       newValues: {
-        onHandQuantity: newOnHand,
+        onHandQuantity: result.newOnHand,
         adjustment: dto.quantity,
         notes: dto.notes,
       },
     });
 
-    return result;
+    return { product: result.product, movement: result.movement };
   }
 
   async reserveStock(
@@ -114,10 +121,15 @@ export class InventoryService {
     actorRole: UserRole,
   ) {
     return prisma.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({
-        where: { id: dto.productId },
-      });
+      // Row-level lock to prevent concurrent over-reservation
+      const products = await tx.$queryRaw<any[]>`
+        SELECT id, name, on_hand_quantity as "onHandQuantity", reserved_quantity as "reservedQuantity"
+        FROM products
+        WHERE id = ${dto.productId}::uuid
+        FOR UPDATE
+      `;
 
+      const product = products[0];
       if (!product) {
         throw Object.assign(new Error('Product not found'), { statusCode: 404 });
       }
@@ -182,10 +194,15 @@ export class InventoryService {
     actorRole: UserRole,
   ) {
     return prisma.$transaction(async (tx) => {
-      const product = await tx.product.findUnique({
-        where: { id: dto.productId },
-      });
+      // Row-level lock to prevent concurrent release anomalies
+      const products = await tx.$queryRaw<any[]>`
+        SELECT id, name, on_hand_quantity as "onHandQuantity", reserved_quantity as "reservedQuantity"
+        FROM products
+        WHERE id = ${dto.productId}::uuid
+        FOR UPDATE
+      `;
 
+      const product = products[0];
       if (!product) {
         throw Object.assign(new Error('Product not found'), { statusCode: 404 });
       }

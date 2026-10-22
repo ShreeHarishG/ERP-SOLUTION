@@ -10,8 +10,10 @@ function freeQty(onHand: number, reserved: number): number {
 }
 
 export class SalesService {
-  async list() {
+  async list(limit = 50, skip = 0) {
     return prisma.salesOrder.findMany({
+      take: limit,
+      skip,
       include: {
         items: {
           include: { product: true },

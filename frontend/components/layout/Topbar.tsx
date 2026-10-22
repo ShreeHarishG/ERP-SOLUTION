@@ -1,6 +1,8 @@
 'use client';
 
 import { useAuth } from '@/hooks/useAuth';
+import { useAuthStore } from '@/store/auth.store';
+import api from '@/lib/api';
 import { Menu, Bell, Search, LogOut, User, Sparkles, ChevronDown, Plus, CheckCheck, ExternalLink, AlertTriangle, ArrowRight } from 'lucide-react';
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -19,6 +21,7 @@ export default function Topbar({
   setAiOpen: (val: boolean) => void;
 }) {
   const { logout, isLoggingOut, user, login } = useAuth();
+  const { setUser } = useAuthStore();
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false);
   const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotificationsMenu, setShowNotificationsMenu] = useState(false);
@@ -38,9 +41,12 @@ export default function Topbar({
     { name: 'Inventory Manager',email: 'neha@shivfurniture.com',   role: 'inventory' },
   ];
 
-  const handleSwitchRole = async (email: string) => {
+  const handleSwitchRole = async (role: string) => {
     try {
-      await login({ email, password: 'Admin@123' });
+      const res = await api.post('/auth/switch-role', { role });
+      if (res.data?.data?.user) {
+        setUser(res.data.data.user);
+      }
       window.location.reload();
     } catch (e) {
       console.error('Failed to switch role', e);
@@ -113,7 +119,7 @@ export default function Topbar({
                 {rolesList.map((r) => (
                   <button
                     key={r.role}
-                    onClick={() => { setShowRoleMenu(false); handleSwitchRole(r.email); }}
+                    onClick={() => { setShowRoleMenu(false); handleSwitchRole(r.role); }}
                     className={`w-full text-left px-3 py-2 rounded-lg hover:bg-slate-50 text-xs font-medium flex items-center justify-between transition-colors ${
                       user?.role === r.role ? 'bg-[#F8E7F6]/30 text-[#4B164C] font-semibold' : 'text-text-secondary hover:text-[#4B164C]'
                     }`}

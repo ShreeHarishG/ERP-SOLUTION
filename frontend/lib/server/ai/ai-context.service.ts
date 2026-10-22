@@ -10,6 +10,7 @@ export class AIContextService {
       manufacturingOrders,
       purchaseOrders,
       auditLogs,
+      deliveredAgg,
     ] = await Promise.all([
       // Get all active products
       prisma.product.findMany({
@@ -18,8 +19,10 @@ export class AIContextService {
           bomHeaders: true,
         },
       }),
-      // Get sales orders
+      // Get recent sales orders
       prisma.salesOrder.findMany({
+        take: 50,
+        orderBy: { createdAt: 'desc' },
         include: {
           items: {
             include: {
@@ -28,15 +31,19 @@ export class AIContextService {
           },
         },
       }),
-      // Get manufacturing orders
+      // Get recent manufacturing orders
       prisma.manufacturingOrder.findMany({
+        take: 50,
+        orderBy: { createdAt: 'desc' },
         include: {
           product: true,
           bom: true,
         },
       }),
-      // Get purchase orders
+      // Get recent purchase orders
       prisma.purchaseOrder.findMany({
+        take: 50,
+        orderBy: { createdAt: 'desc' },
         include: {
           items: {
             include: {
@@ -49,6 +56,11 @@ export class AIContextService {
       prisma.auditLog.findMany({
         orderBy: { createdAt: 'desc' },
         take: 20,
+      }),
+      // Native SQL aggregation for total delivered revenue
+      prisma.salesOrder.aggregate({
+        where: { status: 'delivered' },
+        _sum: { totalAmount: true },
       }),
     ]);
 
@@ -97,9 +109,7 @@ export class AIContextService {
     const delayedSalesOrders = openSalesOrders.filter(
       (so) => so.expectedDelivery && new Date(so.expectedDelivery) < now
     );
-    const totalRevenue = salesOrders
-      .filter((so) => so.status === 'delivered')
-      .reduce((sum, so) => sum + Number(so.totalAmount), 0);
+    const totalRevenue = Number(deliveredAgg._sum?.totalAmount || 0);
 
     const demandMap: Record<string, { sku: string; name: string; quantity: number }> = {};
     salesOrders.forEach((so) => {

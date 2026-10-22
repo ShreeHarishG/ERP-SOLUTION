@@ -5,8 +5,10 @@ import { bomsService } from '../boms/boms.service';
 import type { UserRole } from '@prisma/client';
 
 export class PurchaseService {
-  async list() {
+  async list(limit = 50, skip = 0) {
     return prisma.purchaseOrder.findMany({
+      take: limit,
+      skip,
       include: {
         items: {
           include: { product: true },

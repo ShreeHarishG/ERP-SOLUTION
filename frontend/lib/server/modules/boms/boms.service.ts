@@ -4,8 +4,11 @@ import type { UserRole } from '@prisma/client';
 import type { CreateBomInput } from './boms.validation';
 
 export class BomsService {
-  async list() {
+  async list(options: { limit?: number; skip?: number } = {}) {
+    const { limit = 50, skip = 0 } = options;
     return prisma.bom.findMany({
+      skip,
+      take: limit,
       include: {
         product: true,
         items: {
