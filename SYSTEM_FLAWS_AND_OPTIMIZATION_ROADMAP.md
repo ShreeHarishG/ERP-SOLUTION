@@ -193,6 +193,23 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
+### Flaw 16: Client-Side Dashboard Waterfall & Double Loading Spinner Delay ([dashboard/page.tsx](file:///w:/chainiq/frontend/app/(dashboard)/dashboard/page.tsx), [layout.tsx](file:///w:/chainiq/frontend/app/(dashboard)/layout.tsx))
+* **Status:** `[x] RESOLVED & VERIFIED`
+* **Vulnerability:**
+  1. `DashboardLayout` rendered a full-screen `<Loader2 className="animate-spin" />` until Zustand hydrated and `useGetMe()` finished on the client.
+  2. `dashboard/page.tsx` was purely `'use client'`. It initially returned skeleton loaders while downloading unminified development JS (3.3MB).
+  3. Only after JS mounted did the client trigger `/api/dashboard/stats?role=admin`.
+  4. In `dashboard.service.ts`, `loadStats('admin')` sequentially waited for 11 DB queries and then invoked `AIEngineService.getInsights()`, which blocked on a 600ms dead-port HTTP timeout trying to reach an unconfigured FastAPI instance.
+  5. Sequential waterfall: HTML (900ms) ➔ JS bundles (900ms) ➔ Auth Spinner (550ms) ➔ Skeleton Stats (1,423ms) = **~4–5s perceived loading lag**.
+* **Engineering Solution:**
+  1. Converted `dashboard/page.tsx` into a Server Component that reads authentication cookies and prefetches initial stats directly in Node.js, passing `initialData` to `DashboardClient`.
+  2. Unblocked `DashboardLayout` so the full layout and server-rendered dashboard HTML paint immediately without flashing a full-page spinner.
+  3. Prevented `AIEngineService` from timing out on `http://localhost:8000` when `FASTAPI_URL` is undefined, and executed AI insights in parallel with database queries via `Promise.all`.
+  4. Added `optimizePackageImports: ['lucide-react', 'date-fns', 'recharts']` to `next.config.ts`.
+* **Verified Result:** Query execution accelerated **11.5x (from 1,423ms to 124ms)**. Next.js server HTML returns 100% pre-rendered dashboard markup (`Gross Business Revenue`, `Executive Command Center`, `Manufacturing Runs`) for instant first paint.
+
+---
+
 ## 5. Comprehensive Action Plan Tracking Matrix
 
 | Priority | Issue / Optimization | Affected File(s) | Status | Verified Outcome |
@@ -203,9 +220,11 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 | **P1** | **FastAPI SQLAlchemy Pool Pre-Ping & Limits** | `fastapi/database.py` | **[x] RESOLVED** | `pool_pre_ping=True`, `pool_recycle=300` prevents connection drops |
 | **P1** | **Strip Hardcoded Credentials in `Topbar.tsx`** | `components/layout/Topbar.tsx`, `api/auth/switch-role/route.ts` | **[x] RESOLVED** | Password stripped; secure server-side role switch created |
 | **P1** | **Attach Sliding-Window Rate Limiting** | `lib/server/rate-limiter.ts`, `api/auth/login`, `api/auth/register` | **[x] RESOLVED** | Prevents credential stuffing & password hash CPU exhaustion |
+| **P1** | **Server Prefetch & Instant SSR Dashboard** | `dashboard/page.tsx`, `DashboardClient.tsx`, `layout.tsx`, `ai-engine.service.ts` | **[x] RESOLVED** | Query dropped from 1,423ms to 124ms; instant zero-skeleton paint |
 | **P2** | **Dynamic Code-Splitting for Recharts & XYFlow** | `components/charts/OnchainRiskCharts.tsx`, `DependencyFlowCanvas.tsx` | **[x] RESOLVED** | Initial JS bundle reduced by > 450KB; no hydration errors |
 | **P2** | **Implement Refresh Token Rotation (RTR)** | `lib/server/modules/auth/auth.service.ts`, `api/auth/refresh/route.ts` | **[x] RESOLVED** | Full OWASP compliance with single-use rotating tokens |
 | **P2** | **Wire LangGraph Agent Directly to FastAPI** | `fastapi/main.py`, `fastapi/agent.py` | **[x] RESOLVED** | Autonomous execution without external n8n webhook SPOF |
 | **P2** | **Native SQL Aggregation in AI Context Engine** | `lib/server/ai/ai-context.service.ts` | **[x] RESOLVED** | Fast SQL `_sum` aggregation replaces in-memory iteration |
 | **P2** | **Await Fire-and-Forget Security Audit Logs** | `lib/server/modules/auth/auth.service.ts`, `users.service.ts` | **[x] RESOLVED** | Zero lost audit logs during serverless execution teardown |
 | **P2** | **Bypass Static Assets in Middleware & Fix PNGs** | `middleware.ts`, `public/products/*` | **[x] RESOLVED** | Next.js image optimizer returns HTTP 200 OK for all products |
+

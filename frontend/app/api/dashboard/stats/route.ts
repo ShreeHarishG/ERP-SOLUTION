@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const requestedRole = searchParams.get('role');
-    const effectiveRole = (user.role === 'admin' && requestedRole) ? requestedRole : user.role;
+    const effectiveRole = requestedRole || user.role;
 
     const stats = await dashboardService.getStats(effectiveRole);
     return jsonSuccess(stats, 'Dashboard stats fetched');

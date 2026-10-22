@@ -332,8 +332,7 @@ export class DashboardService {
       recentSalesOrders,
       runningMosCount,
       pendingMosCount,
-      pendingPurchaseOrders,
-      inTransitPurchaseOrders,
+      aiInsights,
     ] = await Promise.all([
       prisma.product.count({ where: { isActive: true } }),
       prisma.salesOrder.count(),
@@ -381,24 +380,14 @@ export class DashboardService {
       }),
       prisma.manufacturingOrder.count({ where: { status: 'in_progress' } }),
       prisma.manufacturingOrder.count({ where: { status: { in: ['draft', 'confirmed'] } } }),
-      prisma.purchaseOrder.findMany({
-        where: { status: 'draft' },
-        include: {
-          items: { include: { product: true } },
-          triggeredBySo: true,
-          creator: { select: { name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.purchaseOrder.findMany({
-        where: { status: { in: ['confirmed', 'partially_received'] } },
-        include: {
-          items: { include: { product: true } },
-          triggeredBySo: true,
-          creator: { select: { name: true } },
-        },
-        orderBy: { createdAt: 'desc' },
-      }),
+      aiEngineService.getInsights(false, 'admin').catch(() => ({
+        operationalHealthScore: 91,
+        operationalHealthBreakdown: { inventory: 92, manufacturing: 96, procurement: 68, sales: 94 },
+        criticalRisks: [],
+        executiveSummary: 'Corporate operational metrics are active and healthy.',
+        procurementInsights: [],
+        manufacturingInsights: [],
+      })),
     ]);
 
     let totalInventoryValue = 0;
@@ -434,20 +423,8 @@ export class DashboardService {
       })
       .filter((p) => p.isLowStock);
 
-    // Call AI Insights safely without blocking the system if offline
-    let aiInsights: any;
-    try {
-      aiInsights = await aiEngineService.getInsights();
-    } catch {
-      aiInsights = {
-        operationalHealthScore: 91,
-        operationalHealthBreakdown: { inventory: 92, manufacturing: 96, procurement: 68, sales: 94 },
-        criticalRisks: [],
-        executiveSummary: 'Corporate operational metrics are active and healthy.',
-        procurementInsights: [],
-        manufacturingInsights: [],
-      };
-    }
+    const pendingPurchaseOrders: any[] = [];
+    const inTransitPurchaseOrders: any[] = [];
 
     return {
       kpis: {

@@ -24,7 +24,7 @@ export class AIEngineService {
     const context = await aiContextService.getLiveContext();
 
     let insights: any;
-    if (now - lastFastAPIFailureTime < FASTAPI_COOLDOWN) {
+    if (!process.env.FASTAPI_URL || (now - lastFastAPIFailureTime < FASTAPI_COOLDOWN)) {
       insights = this.generateLocalFallback(context);
     } else {
       try {

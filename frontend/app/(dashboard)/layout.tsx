@@ -63,7 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const authorized = isAuthorized();
 
-  if (!_hasHydrated || (!user && isLoading) || !isAuthenticated) {
+  if (_hasHydrated && !isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5]">
         <Loader2 className="animate-spin text-[#4B164C]" size={40} />
