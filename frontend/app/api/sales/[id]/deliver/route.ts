@@ -1,0 +1,24 @@
+import { salesService } from '@/lib/server/modules/sales/sales.service';
+import { requireRole, isErrorResponse } from '@/lib/server/auth';
+import { jsonSuccess } from '@/lib/server/api-response';
+import { handleRoute } from '@/lib/server/handle-route';
+import type { UserRole } from '@prisma/client';
+
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function POST(_request: Request, context: RouteContext) {
+  return handleRoute(async () => {
+    const actor = await requireRole('admin', 'sales');
+    if (isErrorResponse(actor)) return actor;
+
+    const { id } = await context.params;
+    const result = await salesService.deliver(
+      id,
+      actor.sub,
+      actor.name,
+      actor.role as UserRole
+    );
+
+    return jsonSuccess(result, 'Sales order delivered successfully');
+  });
+}
