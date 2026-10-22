@@ -14,10 +14,11 @@ export const useInventory = (productId?: string) => {
     });
   };
 
-  const useLedger = () => {
+  const useLedger = (options?: { initialData?: any }) => {
     return useQuery({
       queryKey: ['inventory-ledger', productId],
       queryFn: () => inventoryApi.movementsLedger(productId),
+      initialData: options?.initialData,
     });
   };
 

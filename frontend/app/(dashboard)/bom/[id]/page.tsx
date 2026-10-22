@@ -1,36 +1,20 @@
-'use client';
-
-import { useParams } from 'next/navigation';
-import { useBom } from '@/hooks/useBom';
-import BomForm from '@/components/forms/BomForm';
-import { Loader2 } from 'lucide-react';
 import React from 'react';
+import { bomsService } from '@/lib/server/modules/boms/boms.service';
+import EditBomClient from '@/components/bom/EditBomClient';
+import { serializeForClient } from '@/lib/server/serialize';
 
-export default function EditBomPage() {
-  const params = useParams();
-  const id = params.id as string;
-  const { useGet } = useBom();
-  const { data: bom, isLoading, isError } = useGet(id);
+export const dynamic = 'force-dynamic';
 
-  if (isLoading) {
-    return (
-      <div className="p-8 flex justify-center items-center h-full min-h-[300px]">
-        <Loader2 className="animate-spin text-brand-primary" size={32} />
-      </div>
-    );
+export default async function EditBomPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  let initialBom = null;
+
+  try {
+    const rawBom = await bomsService.getById(id);
+    initialBom = serializeForClient(rawBom);
+  } catch (err) {
+    console.warn('[EditBomPage SSR] Could not prefetch BOM:', err);
   }
 
-  if (isError || !bom) {
-    return <div className="p-8 text-center text-rose-500">Failed to load BOM or BOM not found.</div>;
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="page-title">Edit BOM: {bom.name}</h1>
-        <p className="page-subtitle">Update components, quantities, or yield details</p>
-      </div>
-      <BomForm bom={bom} />
-    </div>
-  );
+  return <EditBomClient id={id} initialBom={initialBom} />;
 }

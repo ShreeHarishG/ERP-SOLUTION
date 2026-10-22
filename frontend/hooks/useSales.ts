@@ -15,10 +15,11 @@ export const useSales = () => {
     });
   };
 
-  const useGet = (id: string) => {
+  const useGet = (id: string, options?: { initialData?: any }) => {
     return useQuery({
       queryKey: ['sales-order', id],
       queryFn: () => salesApi.getById(id),
+      initialData: options?.initialData,
       enabled: !!id,
     });
   };

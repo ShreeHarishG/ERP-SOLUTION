@@ -1,36 +1,20 @@
-'use client';
-
-import { useParams } from 'next/navigation';
-import { useProducts } from '@/hooks/useProducts';
-import ProductForm from '@/components/forms/ProductForm';
-import { Loader2 } from 'lucide-react';
 import React from 'react';
+import { productsService } from '@/lib/server/modules/products/products.service';
+import EditProductClient from '@/components/products/EditProductClient';
+import { serializeForClient } from '@/lib/server/serialize';
 
-export default function EditProductPage() {
-  const params = useParams();
-  const id = params.id as string;
-  const { useGet } = useProducts();
-  const { data: product, isLoading, isError } = useGet(id);
+export const dynamic = 'force-dynamic';
 
-  if (isLoading) {
-    return (
-      <div className="p-8 flex justify-center items-center h-full min-h-[300px]">
-        <Loader2 className="animate-spin text-brand-primary" size={32} />
-      </div>
-    );
+export default async function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  let initialProduct = null;
+
+  try {
+    const rawProduct = await productsService.getById(id);
+    initialProduct = serializeForClient(rawProduct);
+  } catch (err) {
+    console.warn('[EditProductPage SSR] Could not prefetch product:', err);
   }
 
-  if (isError || !product) {
-    return <div className="p-8 text-center text-rose-500">Failed to load product or product not found.</div>;
-  }
-
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="page-title">Edit Product: {product.name}</h1>
-        <p className="page-subtitle">Update pricing, minimum levels, or details</p>
-      </div>
-      <ProductForm product={product} />
-    </div>
-  );
+  return <EditProductClient id={id} initialProduct={initialProduct} />;
 }

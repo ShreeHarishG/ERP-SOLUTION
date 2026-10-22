@@ -22,10 +22,11 @@ export const useProducts = (filters?: any) => {
     };
   };
 
-  const useGet = (id: string) => {
+  const useGet = (id: string, options?: { initialData?: any }) => {
     return useQuery({
       queryKey: ['product', id],
       queryFn: () => productsApi.getById(id),
+      initialData: options?.initialData,
       enabled: !!id,
     });
   };

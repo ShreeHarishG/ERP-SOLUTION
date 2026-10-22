@@ -14,10 +14,11 @@ export const useBom = () => {
     });
   };
 
-  const useGet = (id: string) => {
+  const useGet = (id: string, options?: { initialData?: any }) => {
     return useQuery({
       queryKey: ['bom', id],
       queryFn: () => bomsApi.getById(id),
+      initialData: options?.initialData,
       enabled: !!id,
     });
   };
