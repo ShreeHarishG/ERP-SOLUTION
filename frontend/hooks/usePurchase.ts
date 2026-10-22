@@ -6,11 +6,12 @@ import toast from 'react-hot-toast';
 export const usePurchase = () => {
   const queryClient = useQueryClient();
 
-  const useList = (options?: { enabled?: boolean }) => {
+  const useList = (options?: { enabled?: boolean; initialData?: any }) => {
     return useProgressiveList({
       queryKey: ['purchase-orders'],
       fetchPage: (params) => purchaseApi.list(params),
       enabled: options?.enabled,
+      initialData: options?.initialData,
     });
   };
 

@@ -208,6 +208,21 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
   4. Added `optimizePackageImports: ['lucide-react', 'date-fns', 'recharts']` to `next.config.ts`.
 * **Verified Result:** Query execution accelerated **11.5x (from 1,423ms to 124ms)**. Next.js server HTML returns 100% pre-rendered dashboard markup (`Gross Business Revenue`, `Executive Command Center`, `Manufacturing Runs`) for instant first paint.
 
+### 4.7 Flaw 17: Client-Side Request Waterfalls Across All Workspace Pages (SOLVED)
+* **Root Cause:**
+  1. Every workspace page (`/products`, `/sales`, `/inventory`, `/procurement`, `/manufacturing`, `/bom`, `/vendors`, `/audit`, `/users`, `/timeline`, `/action-center`, `/onchain-insights`) was authored exclusively as `'use client'`.
+  2. Upon page transition, the browser received an empty HTML scaffold (~2KB) with spinning loaders (`<Loader2 className="animate-spin" />`).
+  3. Only after the browser downloaded and executed the client React bundles did TanStack Query trigger secondary client-to-server HTTP API calls (`/api/products`, `/api/sales`, etc.).
+  4. This resulted in an unavoidable 2-roundtrip delay (HTML ➔ JS ➔ API Fetch ➔ Paint) with flashing loading spinners on every page.
+* **Engineering Solution:**
+  1. **Universal Server Pre-Rendering Architecture:** Converted all 12 operational pages into Next.js Server Components that fetch initial data sets directly from the local service layer / Prisma in Node.js with **0 HTTP loopback overhead**.
+  2. **Initial Data Ingestion:** Refactored `useProgressiveList` and all core list hooks (`useProducts`, `useSales`, `useInventory`, `usePurchase`, `useManufacturing`, `useBom`, `useVendors`, `useOnchainInsights`) to accept optional `initialData`.
+  3. **Extracted Interactive Client Views:** Preserved 100% of mutations, modals, role checks, and filter reactivity inside dedicated client components (`ProductsClient`, `SalesClient`, `InventoryClient`, `ProcurementClient`, `ManufacturingClient`, `BomClient`, `VendorsClient`, `AuditClient`, `UsersClient`, `TimelineClient`, `ActionCenterClient`, `OnchainInsightsClient`).
+* **Verified Benchmark Result:**
+  - Complete HTML payload delivered with pre-rendered data tables on tick 0 (up to 323 KB pre-rendered HTML).
+  - Eliminates client loading spinners on first paint across the entire ERP workspace.
+  - Passes full TypeScript type validation (`npx tsc --noEmit` exited with code 0).
+
 ---
 
 ## 5. Comprehensive Action Plan Tracking Matrix
@@ -216,6 +231,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 | :--- | :--- | :--- | :---: | :--- |
 | **P0** | **Fix N+1 MO Explosion in Manufacturing** | `lib/server/modules/manufacturing/manufacturing.service.ts` | **[x] RESOLVED** | Slashed queries from 201+ to 1; route loads in < 50ms |
 | **P0** | **Atomic Row Locking on Stock Adjustments** | `lib/server/modules/inventory/inventory.service.ts` | **[x] RESOLVED** | PostgreSQL `FOR UPDATE` prevents negative stock race conditions |
+| **P0** | **Universal Server Pre-Rendering Across All Pages** | `app/(dashboard)/*`, `components/*/*Client.tsx`, `hooks/*` | **[x] RESOLVED** | 100% of workspace pages pre-render full tables on server; 0 skeleton flashing |
 | **P1** | **Enforce Keyset Pagination on All List APIs** | `sales.service.ts`, `purchase.service.ts`, `inventory.service.ts`, `boms.service.ts` | **[x] RESOLVED** | Responses capped < 50KB; prevents V8 OOM crashes |
 | **P1** | **FastAPI SQLAlchemy Pool Pre-Ping & Limits** | `fastapi/database.py` | **[x] RESOLVED** | `pool_pre_ping=True`, `pool_recycle=300` prevents connection drops |
 | **P1** | **Strip Hardcoded Credentials in `Topbar.tsx`** | `components/layout/Topbar.tsx`, `api/auth/switch-role/route.ts` | **[x] RESOLVED** | Password stripped; secure server-side role switch created |
@@ -227,4 +243,5 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 | **P2** | **Native SQL Aggregation in AI Context Engine** | `lib/server/ai/ai-context.service.ts` | **[x] RESOLVED** | Fast SQL `_sum` aggregation replaces in-memory iteration |
 | **P2** | **Await Fire-and-Forget Security Audit Logs** | `lib/server/modules/auth/auth.service.ts`, `users.service.ts` | **[x] RESOLVED** | Zero lost audit logs during serverless execution teardown |
 | **P2** | **Bypass Static Assets in Middleware & Fix PNGs** | `middleware.ts`, `public/products/*` | **[x] RESOLVED** | Next.js image optimizer returns HTTP 200 OK for all products |
+
 

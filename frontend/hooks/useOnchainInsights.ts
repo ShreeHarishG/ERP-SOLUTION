@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { onchainInsightsApi } from '@/services/onchain-insights.api';
 import type {
+  OnchainDashboardData,
   OnchainDashboardFilters,
   SupplierFilterParams,
   SwitchSimulatorParams,
@@ -29,10 +30,11 @@ export const useOnchainInsights = () => {
   const queryClient = useQueryClient();
   const CACHE_TIME = 5 * 60 * 1000; // 5 minutes cache for instant navigation
 
-  const useDashboard = (filters: OnchainDashboardFilters) => {
-    return useQuery({
+  const useDashboard = (filters: OnchainDashboardFilters, options?: { initialData?: OnchainDashboardData }) => {
+    return useQuery<OnchainDashboardData>({
       queryKey: ['onchainInsightsDashboard', filters],
       queryFn: () => onchainInsightsApi.getDashboard(filters),
+      initialData: options?.initialData,
       staleTime: CACHE_TIME,
     });
   };

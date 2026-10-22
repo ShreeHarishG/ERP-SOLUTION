@@ -6,10 +6,11 @@ import toast from 'react-hot-toast';
 export const useProducts = (filters?: any) => {
   const queryClient = useQueryClient();
 
-  const useList = () => {
+  const useList = (options?: { initialData?: any }) => {
     const list = useProgressiveList({
       queryKey: ['products', filters],
       fetchPage: (params) => productsApi.list({ ...filters, ...params }),
+      initialData: options?.initialData,
     });
     return {
       ...list,

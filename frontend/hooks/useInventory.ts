@@ -6,10 +6,11 @@ import toast from 'react-hot-toast';
 export const useInventory = (productId?: string) => {
   const queryClient = useQueryClient();
 
-  const useBalances = () => {
+  const useBalances = (options?: { initialData?: any }) => {
     return useProgressiveList({
       queryKey: ['inventory-balances'],
       fetchPage: (params) => inventoryApi.list(params),
+      initialData: options?.initialData,
     });
   };
 

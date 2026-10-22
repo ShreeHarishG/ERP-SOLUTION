@@ -5,10 +5,11 @@ import toast from 'react-hot-toast';
 export const useVendors = () => {
   const queryClient = useQueryClient();
 
-  const useList = () => {
+  const useList = (options?: { initialData?: any }) => {
     return useQuery({
       queryKey: ['vendors'],
       queryFn: () => vendorsApi.list(),
+      initialData: options?.initialData,
     });
   };
 

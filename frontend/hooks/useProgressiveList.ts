@@ -20,19 +20,55 @@ export function useProgressiveList<T>(options: {
   queryKey: unknown[];
   fetchPage: (params: { offset: number; limit: number; page: number }) => Promise<ListPage<T>>;
   enabled?: boolean;
+  initialData?: any;
 }) {
-  const { queryKey, fetchPage, enabled = true } = options;
+  const { queryKey, fetchPage, enabled = true, initialData } = options;
+
+  const initialItems = useMemo(() => {
+    if (!initialData) return null;
+    return (
+      initialData.items ||
+      initialData.products ||
+      initialData.orders ||
+      initialData.balances ||
+      initialData.boms ||
+      []
+    );
+  }, [initialData]);
 
   const first = useQuery({
     queryKey: [...queryKey, 'first', FIRST],
     queryFn: () => fetchPage({ offset: 0, limit: FIRST, page: 1 }),
     enabled,
+    initialData: initialItems
+      ? {
+          items: initialItems.slice(0, FIRST),
+          page: 1,
+          limit: FIRST,
+          offset: 0,
+          total: initialData.total ?? initialItems.length,
+          hasMore: (initialData.total ?? initialItems.length) > FIRST,
+          summary: initialData.summary,
+        }
+      : undefined,
   });
 
   const rest = useQuery({
     queryKey: [...queryKey, 'rest', REST],
     queryFn: () => fetchPage({ offset: FIRST, limit: REST, page: 2 }),
     enabled: enabled && Boolean(first.data?.hasMore) && first.isSuccess,
+    initialData:
+      initialItems && initialItems.length > FIRST
+        ? {
+            items: initialItems.slice(FIRST, FIRST + REST),
+            page: 2,
+            limit: REST,
+            offset: FIRST,
+            total: initialData.total ?? initialItems.length,
+            hasMore: (initialData.total ?? initialItems.length) > FIRST + REST,
+            summary: initialData.summary,
+          }
+        : undefined,
   });
 
   useEffect(() => {
@@ -56,6 +92,6 @@ export function useProgressiveList<T>(options: {
     isFetchingMore: rest.isFetching,
     hasMore: Boolean(rest.data ? rest.data.hasMore : first.data?.hasMore),
     total: rest.data?.total ?? first.data?.total ?? items.length,
-    summary: first.data?.summary,
+    summary: first.data?.summary ?? initialData?.summary,
   };
 }

@@ -6,10 +6,11 @@ import toast from 'react-hot-toast';
 export const useBom = () => {
   const queryClient = useQueryClient();
 
-  const useList = () => {
+  const useList = (options?: { initialData?: any }) => {
     return useProgressiveList({
       queryKey: ['boms'],
       fetchPage: (params) => bomsApi.list(params),
+      initialData: options?.initialData,
     });
   };
 
