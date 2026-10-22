@@ -6,7 +6,7 @@ import type { CreateBomInput } from './boms.validation';
 
 export class BomsService {
   async list(options: { limit?: number; skip?: number; page?: number } = {}) {
-    const { limit = 5, skip = 0, page = 1 } = options;
+    const { limit = 20, skip = 0, page = 1 } = options;
     const [items, total] = await Promise.all([
       prisma.bom.findMany({
         skip,

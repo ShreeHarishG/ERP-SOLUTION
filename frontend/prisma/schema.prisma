@@ -34,6 +34,7 @@ model User {
   confirmedSalesOrders       SalesOrder[]         @relation("SalesOrderConfirmer")
   createdSalesOrders         SalesOrder[]         @relation("SalesOrderCreator")
   deliveredSalesOrders       SalesOrder[]         @relation("SalesOrderDeliverer")
+  refreshTokens              RefreshToken[]
 
   @@index([email])
   @@index([role])
@@ -437,3 +438,26 @@ enum AuditAction {
   login
   logout
 }
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique @map("token_hash") @db.VarChar(64)
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  isRevoked Boolean  @default(false) @map("is_revoked")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@map("refresh_tokens")
+}
+
+model SystemSetting {
+  key       String   @id @db.VarChar(100)
+  value     String
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("system_settings")
+}
+

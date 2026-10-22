@@ -1,3 +1,5 @@
+import crypto from 'crypto';
+
 interface RateLimitRecord {
   timestamps: number[];
 }
@@ -48,13 +50,53 @@ export function checkRateLimit(
 }
 
 export function getClientIp(request: Request): string {
-  const xForwardedFor = request.headers.get('x-forwarded-for');
-  if (xForwardedFor) {
-    return xForwardedFor.split(',')[0].trim();
+  // 1. Cloudflare Connecting IP
+  const cfConnectingIp = request.headers.get('cf-connecting-ip');
+  if (cfConnectingIp && isValidIp(cfConnectingIp.trim())) {
+    return cfConnectingIp.trim();
   }
+
+  // 2. Vercel Forwarded For
+  const xVercelForwardedFor = request.headers.get('x-vercel-forwarded-for');
+  if (xVercelForwardedFor) {
+    const ip = xVercelForwardedFor.split(',')[0].trim();
+    if (isValidIp(ip)) return ip;
+  }
+
+  // 3. Real IP header (Nginx / HAProxy / ALB)
   const realIp = request.headers.get('x-real-ip');
-  if (realIp) {
+  if (realIp && isValidIp(realIp.trim())) {
     return realIp.trim();
   }
-  return '127.0.0.1';
+
+  // 4. Standard X-Forwarded-For header (leftmost entry is original client)
+  const xForwardedFor = request.headers.get('x-forwarded-for');
+  if (xForwardedFor) {
+    const ip = xForwardedFor.split(',')[0].trim();
+    if (isValidIp(ip)) return ip;
+  }
+
+  // 5. In local development, use loopback
+  if (process.env.NODE_ENV === 'development') {
+    return '127.0.0.1';
+  }
+
+  // 6. In production without trusted IP headers, generate a per-client fallback
+  // to avoid collapsing all anonymous traffic into a single rate-limit bucket
+  const ua = request.headers.get('user-agent') || 'unknown-ua';
+  const acceptLang = request.headers.get('accept-language') || 'unknown-lang';
+  const fingerprint = crypto
+    .createHash('sha256')
+    .update(`${ua}:${acceptLang}`)
+    .digest('hex')
+    .substring(0, 16);
+
+  return `anon_${fingerprint}`;
 }
+
+function isValidIp(ip: string): boolean {
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  const ipv6Regex = /^[0-9a-fA-F:]+$/;
+  return (ipv4Regex.test(ip) || ipv6Regex.test(ip)) && ip.length <= 45;
+}
+

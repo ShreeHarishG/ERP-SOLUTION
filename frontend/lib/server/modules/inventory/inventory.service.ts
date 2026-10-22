@@ -11,7 +11,7 @@ import type {
 import { adjustOnHand, HEAVY_TX, release, reserve } from './stock-ledger';
 
 export class InventoryService {
-  async list(limit = 5, skip = 0, page = 1) {
+  async list(limit = 20, skip = 0, page = 1) {
     const [items, total] = await Promise.all([
       prisma.product.findMany({
         take: limit,

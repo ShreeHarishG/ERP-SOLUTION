@@ -24,8 +24,8 @@ try {
   console.warn('Failed to load .env file manually:', e);
 }
 
-import { aiEngineService } from './lib/server/ai/ai-engine.service';
-import prisma from './lib/server/db';
+import { aiEngineService } from '@/lib/server/ai/ai-engine.service';
+import prisma from '@/lib/server/db';
 
 async function main() {
   try {

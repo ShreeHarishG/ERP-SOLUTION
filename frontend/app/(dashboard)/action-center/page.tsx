@@ -13,9 +13,9 @@ export default async function ActionCenterPage() {
 
   try {
     const [sales, mos, pos] = await Promise.all([
-      salesService.list(),
-      manufacturingService.list(),
-      purchaseService.list(),
+      salesService.list(50, 0, 1),
+      manufacturingService.list(50, 0, 1),
+      purchaseService.list(50, 0, 1),
     ]);
 
     initialSales = JSON.parse(JSON.stringify(sales));

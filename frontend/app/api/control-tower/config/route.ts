@@ -19,6 +19,8 @@ export async function GET() {
   const user = await requireAuth();
   if (isErrorResponse(user)) return user;
 
+  await controlTowerWebhookService.ensureInitialized();
+
   return NextResponse.json({
     ...publicConfig(),
     isAdmin: user.role === 'admin',
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const updated = controlTowerWebhookService.updateConfig({
+    const updated = await controlTowerWebhookService.updateConfig({
       mode: body?.mode === 'webhook' ? 'webhook' : 'mock',
     });
 

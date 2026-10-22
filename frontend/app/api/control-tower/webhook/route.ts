@@ -47,6 +47,7 @@ export async function GET() {
   const user = await requireAuth();
   if (isErrorResponse(user)) return user;
 
+  await controlTowerWebhookService.ensureInitialized();
   const stats = controlTowerWebhookService.getStats();
   const config = controlTowerWebhookService.getConfig();
 

@@ -89,7 +89,7 @@ type ShortageRow = {
 };
 
 export class SalesService {
-  async list(limit = 5, skip = 0, page = 1) {
+  async list(limit = 20, skip = 0, page = 1) {
     const [items, total] = await Promise.all([
       prisma.salesOrder.findMany({
         take: limit,

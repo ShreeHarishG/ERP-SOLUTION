@@ -24,8 +24,8 @@ try {
   console.warn('Failed to load .env file manually:', e);
 }
 
-import prisma from './lib/server/db';
-import { purchaseService } from './lib/server/modules/purchase/purchase.service';
+import prisma from '@/lib/server/db';
+import { purchaseService } from '@/lib/server/modules/purchase/purchase.service';
 
 async function main() {
   console.log('================================================================');
@@ -98,7 +98,7 @@ async function main() {
       }
       vendors = await prisma.vendor.findMany({ take: 2 });
     }
-    const vendorNames = vendors.map(v => v.name);
+    const vendorNames = vendors.map((v: any) => v.name);
     console.log(`🤝 Target Vendor Registry Partners: ${vendorNames.join(', ')}\n`);
 
     // 4. Create a Purchase Order in draft status
@@ -133,7 +133,7 @@ async function main() {
       where: { purchaseOrderId: po.id },
     });
     console.log(`\n📋 Quotations stored in database for ${po.orderNumber}:`);
-    quotations.forEach((q, idx) => {
+    quotations.forEach((q: any, idx: number) => {
       console.log(`   [Quote ${idx + 1}] Vendor: ${q.vendorName} | Amount: ₹${Number(q.totalAmount).toLocaleString('en-IN')} | Days: ${q.deliveryDays} | Rating: ★${q.rating} | Status: ${q.status}`);
     });
     console.log('');
@@ -162,7 +162,7 @@ async function main() {
     const updatedQuotes = await prisma.vendorQuotation.findMany({
       where: { purchaseOrderId: po.id },
     });
-    console.log(`   Quotation Statuses:`, updatedQuotes.map(q => `${q.vendorName} -> ${q.status}`));
+    console.log(`   Quotation Statuses:`, updatedQuotes.map((q: any) => `${q.vendorName} -> ${q.status}`));
     console.log('');
 
     // 7. Dispatch the Purchase Order (triggers automatic Invoice creation)

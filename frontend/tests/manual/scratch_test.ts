@@ -1,5 +1,5 @@
-import prisma from './lib/server/db';
-import { salesService } from './lib/server/modules/sales/sales.service';
+import prisma from '@/lib/server/db';
+import { salesService } from '@/lib/server/modules/sales/sales.service';
 
 async function test() {
   try {

@@ -34,7 +34,29 @@ let webhookStats = {
   lastActive: new Date().toISOString(),
 };
 
+import prisma from '@/lib/server/db';
+
+let isInitialized = false;
+
 export class ControlTowerWebhookService {
+  /**
+   * Lazily ensure persistent mode is loaded from database
+   */
+  async ensureInitialized(): Promise<void> {
+    if (isInitialized) return;
+    try {
+      const rows: any = await prisma.$queryRawUnsafe(
+        `SELECT value FROM system_settings WHERE key = 'control_tower_mode' LIMIT 1`
+      );
+      if (rows && rows.length > 0 && (rows[0].value === 'mock' || rows[0].value === 'webhook')) {
+        towerConfig.mode = rows[0].value;
+      }
+      isInitialized = true;
+    } catch {
+      // Fall back to env-configured default if database is unavailable
+    }
+  }
+
   /**
    * Get current configuration
    */
@@ -51,16 +73,29 @@ export class ControlTowerWebhookService {
 
   /**
    * Admin may toggle mode only. URLs always come from env.
+   * Mode is persisted to PostgreSQL system_settings so it survives restarts.
    */
-  updateConfig(patch: { mode?: ControlTowerConfig['mode'] }): ControlTowerConfig {
+  async updateConfig(patch: { mode?: ControlTowerConfig['mode'] }): Promise<ControlTowerConfig> {
     if (patch.mode === 'mock' || patch.mode === 'webhook') {
       towerConfig.mode = patch.mode;
+      try {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO system_settings (key, value, updated_at)
+           VALUES ($1, $2, NOW())
+           ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+          'control_tower_mode',
+          patch.mode
+        );
+      } catch (err) {
+        console.warn('[ControlTower] Warning: could not persist mode to DB:', err);
+      }
     }
     towerConfig.webhookUrl = process.env.CONTROL_TOWER_WEBHOOK_URL || '';
     towerConfig.webhookSecret = process.env.CONTROL_TOWER_WEBHOOK_SECRET || '';
     towerConfig.outgoingCallbackUrl = process.env.CONTROL_TOWER_OUTGOING_WEBHOOK || '';
     return this.getConfig();
   }
+
 
   /**
    * Ping / Health check the external single webhook endpoint
@@ -191,6 +226,7 @@ export class ControlTowerWebhookService {
    * Main Webhook Processor: All-in-One Ingestion & Outgoing Webhook Dispatch
    */
   async processWebhook(request: UnifiedWebhookRequest): Promise<UnifiedWebhookResponse> {
+    await this.ensureInitialized();
     const startTime = Date.now();
     const agentId = this.resolveAgentId(request.agent_id, request.payload);
     const agentDef = CONTROL_TOWER_AGENTS.find((a) => a.id === agentId)!;

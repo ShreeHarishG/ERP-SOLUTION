@@ -24,9 +24,9 @@ try {
   console.warn('Failed to load .env file manually:', e);
 }
 
-import prisma from './lib/server/db';
-import { salesService } from './lib/server/modules/sales/sales.service';
-import { manufacturingService } from './lib/server/modules/manufacturing/manufacturing.service';
+import prisma from '@/lib/server/db';
+import { salesService } from '@/lib/server/modules/sales/sales.service';
+import { manufacturingService } from '@/lib/server/modules/manufacturing/manufacturing.service';
 
 async function main() {
   console.log('================================================================');

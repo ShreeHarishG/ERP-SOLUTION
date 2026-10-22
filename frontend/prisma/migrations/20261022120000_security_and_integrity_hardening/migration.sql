@@ -47,3 +47,8 @@ ALTER TABLE "products"
   ADD CONSTRAINT products_reserved_nonneg CHECK (reserved_quantity >= 0) NOT VALID;
 ALTER TABLE "products"
   ADD CONSTRAINT products_reserved_lte_on_hand CHECK (reserved_quantity <= on_hand_quantity) NOT VALID;
+
+ALTER TABLE "products" VALIDATE CONSTRAINT products_on_hand_nonneg;
+ALTER TABLE "products" VALIDATE CONSTRAINT products_reserved_nonneg;
+ALTER TABLE "products" VALIDATE CONSTRAINT products_reserved_lte_on_hand;
+

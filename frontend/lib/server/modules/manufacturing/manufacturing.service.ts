@@ -30,7 +30,7 @@ function mapMOStatus(mo: any) {
 }
 
 export class ManufacturingService {
-  async list(limit = 5, skip = 0, page = 1) {
+  async list(limit = 20, skip = 0, page = 1) {
     const [orders, total] = await Promise.all([
       prisma.manufacturingOrder.findMany({
         take: limit,

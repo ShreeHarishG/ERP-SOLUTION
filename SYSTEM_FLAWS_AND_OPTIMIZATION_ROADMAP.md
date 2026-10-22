@@ -24,7 +24,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ## 1. High-Severity Concurrency & Database Flaws
 
-### Flaw 1: The N+1 Query Explosion in Manufacturing ([manufacturing.service.ts](file:///w:/chainiq/frontend/lib/server/modules/manufacturing/manufacturing.service.ts#L18-L60))
+### Flaw 1: The N+1 Query Explosion in Manufacturing ([manufacturing.service.ts](frontend/lib/server/modules/manufacturing/manufacturing.service.ts))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** `ManufacturingService.list()` executed an unbounded `findMany()` followed by `orders.map(mapMOStatus)` which sequentially called `bomsService.explode()` for every order, generating $1 + (N \times 4)$ remote SQL queries across the WAN.
 * **Engineering Solution:**
@@ -34,7 +34,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
-### Flaw 2: Race Conditions & Negative Inventory in Stock Adjustments ([inventory.service.ts](file:///w:/chainiq/frontend/lib/server/modules/inventory/inventory.service.ts#L33-L95))
+### Flaw 2: Race Conditions & Negative Inventory in Stock Adjustments ([inventory.service.ts](frontend/lib/server/modules/inventory/inventory.service.ts))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** Non-atomic check-then-act pattern in `adjustStock()` and `reserveStock()`. Concurrent sales orders or manufacturing releases read the same `onHandQuantity` simultaneously and overwrote each other, resulting in silent inventory corruption and negative stock.
 * **Engineering Solution:**
@@ -55,7 +55,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
-### Flaw 4: FastAPI SQLAlchemy Connection Leak & Missing Pool Pre-Ping ([fastapi/database.py](file:///w:/chainiq/fastapi/database.py))
+### Flaw 4: FastAPI SQLAlchemy Connection Leak & Missing Pool Pre-Ping ([fastapi/database.py](fastapi/database.py))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** SQLAlchemy engine lacked pool configuration. Remote connection proxies (PgBouncer) dropped idle connections after 60 seconds, resulting in `OperationalError: SSL connection has been closed unexpectedly`.
 * **Engineering Solution:**
@@ -75,7 +75,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ## 2. Security & Authentication Vulnerabilities
 
-### Flaw 5: Stateless Refresh Tokens Without Rotation (OWASP Violation) ([auth.service.ts](file:///w:/chainiq/frontend/lib/server/modules/auth/auth.service.ts#L118-L145))
+### Flaw 5: Stateless Refresh Tokens Without Rotation (OWASP Violation) ([auth.service.ts](frontend/lib/server/modules/auth/auth.service.ts))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** Refresh tokens were reusable for 7 days without rotation, exposing the session to replay and persistent unauthorized access if a token was intercepted.
 * **Engineering Solution:**
@@ -85,7 +85,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
-### Flaw 6: Hardcoded Demo Credentials in Production Bundle ([Topbar.tsx](file:///w:/chainiq/frontend/components/layout/Topbar.tsx#L33-L52))
+### Flaw 6: Hardcoded Demo Credentials in Production Bundle ([Topbar.tsx](frontend/components/layout/Topbar.tsx))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** `Topbar.tsx` contained hardcoded plaintext credentials (`password: 'Admin@123'`) in client-side code, allowing any user to inspect source bundles and gain Super Admin access.
 * **Engineering Solution:**
@@ -95,7 +95,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
-### Flaw 7: Missing Rate Limiting on Authentication Routes ([rate-limiter.ts](file:///w:/chainiq/frontend/lib/server/rate-limiter.ts))
+### Flaw 7: Missing Rate Limiting on Authentication Routes ([rate-limiter.ts](frontend/lib/server/rate-limiter.ts))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** `/api/auth/login` and `/api/auth/register` were completely unprotected against automated credential stuffing, brute-force dictionary attacks, and bcrypt CPU exhaustion DoS.
 * **Engineering Solution:**
@@ -108,7 +108,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ## 3. Frontend, Runtime & Architectural Bottlenecks
 
-### Flaw 8: Heavy Visualization Bundles in Critical Path ([OnchainRiskCharts.tsx](file:///w:/chainiq/frontend/components/charts/OnchainRiskCharts.tsx))
+### Flaw 8: Heavy Visualization Bundles in Critical Path ([OnchainRiskCharts.tsx](frontend/components/charts/OnchainRiskCharts.tsx))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** Direct static imports of `recharts` (`AreaChart`, `PieChart`, `ResponsiveContainer`) injected **~280KB** into the initial route chunk, inflating First Input Delay (FID) and Interaction to Next Paint (INP).
 * **Engineering Solution:**
@@ -118,7 +118,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
-### Flaw 9: In-Memory Financial & Inventory Sums (Node.js Heap Pressure) ([ai-context.service.ts](file:///w:/chainiq/frontend/lib/server/ai/ai-context.service.ts#L48-L115))
+### Flaw 9: In-Memory Financial & Inventory Sums (Node.js Heap Pressure) ([ai-context.service.ts](frontend/lib/server/ai/ai-context.service.ts))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** `AIContextService.getLiveContext()` loaded entire historical order tables and executed in-memory array filtering and JavaScript `.reduce()` to compute total delivered revenue.
 * **Engineering Solution:**
@@ -133,7 +133,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
-### Flaw 10: Architectural Disconnect in FastAPI Microservice ([fastapi/main.py](file:///w:/chainiq/fastapi/main.py))
+### Flaw 10: Architectural Disconnect in FastAPI Microservice ([fastapi/main.py](fastapi/main.py))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:** `fastapi/agent.py` contained a complete LangGraph multi-agent orchestration workflow and Groq SQL tools, but `main.py` bypassed it to call a fragile third-party test webhook (`https://api.agents.snsihub.ai/webhook-test/...`).
 * **Engineering Solution:**
@@ -180,7 +180,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
-### Flaw 15: Edge Middleware Intercepting Public Product Assets & Corrupt Image Encoding ([middleware.ts](file:///w:/chainiq/frontend/middleware.ts))
+### Flaw 15: Edge Middleware Intercepting Public Product Assets & Corrupt Image Encoding ([middleware.ts](frontend/middleware.ts))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:**
   1. `frontend/middleware.ts` contained `pathname.startsWith('/products')` in `isProtectedRoute`. Requests for static public assets (`/products/bookshelf.png`, `/products/chair.png`, `/products/dining-table.png`) were intercepted and returned HTTP 307 redirects to `/login`.
@@ -193,7 +193,7 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
-### Flaw 16: Client-Side Dashboard Waterfall & Double Loading Spinner Delay ([dashboard/page.tsx](file:///w:/chainiq/frontend/app/(dashboard)/dashboard/page.tsx), [layout.tsx](file:///w:/chainiq/frontend/app/(dashboard)/layout.tsx))
+### Flaw 16: Client-Side Dashboard Waterfall & Double Loading Spinner Delay ([dashboard/page.tsx](frontend/app/(dashboard)/dashboard/page.tsx), [layout.tsx](frontend/app/(dashboard)/layout.tsx))
 * **Status:** `[x] RESOLVED & VERIFIED`
 * **Vulnerability:**
   1. `DashboardLayout` rendered a full-screen `<Loader2 className="animate-spin" />` until Zustand hydrated and `useGetMe()` finished on the client.
@@ -232,16 +232,35 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 | **P0** | **Fix N+1 MO Explosion in Manufacturing** | `lib/server/modules/manufacturing/manufacturing.service.ts` | **[x] RESOLVED** | Slashed queries from 201+ to 1; route loads in < 50ms |
 | **P0** | **Atomic Row Locking on Stock Adjustments** | `lib/server/modules/inventory/inventory.service.ts` | **[x] RESOLVED** | PostgreSQL `FOR UPDATE` prevents negative stock race conditions |
 | **P0** | **Universal Server Pre-Rendering Across All Pages** | `app/(dashboard)/*`, `components/*/*Client.tsx`, `hooks/*` | **[x] RESOLVED** | 100% of workspace pages pre-render full tables on server; 0 skeleton flashing |
-| **P1** | **Enforce Keyset Pagination on All List APIs** | `sales.service.ts`, `purchase.service.ts`, `inventory.service.ts`, `boms.service.ts` | **[x] RESOLVED** | Responses capped < 50KB; prevents V8 OOM crashes |
+| **P1** | **Enforce Keyset Pagination on All List APIs** | `sales.service.ts`, `purchase.service.ts`, `inventory.service.ts`, `boms.service.ts` | **[x] RESOLVED** | Responses capped < 50KB; default limit raised to 20; prevents V8 OOM crashes |
 | **P1** | **FastAPI SQLAlchemy Pool Pre-Ping & Limits** | `fastapi/database.py` | **[x] RESOLVED** | `pool_pre_ping=True`, `pool_recycle=300` prevents connection drops |
 | **P1** | **Strip Hardcoded Credentials in `Topbar.tsx`** | `components/layout/Topbar.tsx`, `api/auth/switch-role/route.ts` | **[x] RESOLVED** | Password stripped; secure server-side role switch created |
-| **P1** | **Attach Sliding-Window Rate Limiting** | `lib/server/rate-limiter.ts`, `api/auth/login`, `api/auth/register` | **[x] RESOLVED** | Prevents credential stuffing & password hash CPU exhaustion |
+| **P1** | **Attach Sliding-Window Rate Limiting** | `lib/server/rate-limiter.ts`, `api/auth/login`, `api/auth/register` | **[x] RESOLVED** | Reverse-proxy header validation & per-client fallback prevents DoS & shared IP collapse |
 | **P1** | **Server Prefetch & Instant SSR Dashboard** | `dashboard/page.tsx`, `DashboardClient.tsx`, `layout.tsx`, `ai-engine.service.ts` | **[x] RESOLVED** | Query dropped from 1,423ms to 124ms; instant zero-skeleton paint |
 | **P2** | **Dynamic Code-Splitting for Recharts & XYFlow** | `components/charts/OnchainRiskCharts.tsx`, `DependencyFlowCanvas.tsx` | **[x] RESOLVED** | Initial JS bundle reduced by > 450KB; no hydration errors |
-| **P2** | **Implement Refresh Token Rotation (RTR)** | `lib/server/modules/auth/auth.service.ts`, `api/auth/refresh/route.ts` | **[x] RESOLVED** | Full OWASP compliance with single-use rotating tokens |
+| **P2** | **Implement Refresh Token Rotation (RTR) & Session Revocation** | `lib/server/modules/auth/auth.service.ts`, `api/auth/refresh`, `api/auth/logout` | **[x] RESOLVED** | Full OWASP compliance with `refresh_tokens` DB sessions, token hashing, and logout revocation |
 | **P2** | **Wire LangGraph Agent Directly to FastAPI** | `fastapi/main.py`, `fastapi/agent.py` | **[x] RESOLVED** | Autonomous execution without external n8n webhook SPOF |
 | **P2** | **Native SQL Aggregation in AI Context Engine** | `lib/server/ai/ai-context.service.ts` | **[x] RESOLVED** | Fast SQL `_sum` aggregation replaces in-memory iteration |
 | **P2** | **Await Fire-and-Forget Security Audit Logs** | `lib/server/modules/auth/auth.service.ts`, `users.service.ts` | **[x] RESOLVED** | Zero lost audit logs during serverless execution teardown |
 | **P2** | **Bypass Static Assets in Middleware & Fix PNGs** | `middleware.ts`, `public/products/*` | **[x] RESOLVED** | Next.js image optimizer returns HTTP 200 OK for all products |
+| **P2** | **Control Tower Persistent Storage & Mode Sync** | `lib/server/control-tower/webhook-service.ts`, `system_settings` table | **[x] RESOLVED** | Mode stored in PostgreSQL `system_settings`; survives server restarts & scaling |
+| **P2** | **Validate PostgreSQL Stock Constraints** | PostgreSQL `products` table | **[x] RESOLVED** | `ALTER TABLE products VALIDATE CONSTRAINT ...` verified active and enforced |
+
+---
+
+## 6. Security Advisory & Credential Rotation Guidelines
+
+> [!CAUTION]
+> **Credential Rotation Required for Git History Leaks (Task 8)**
+> While previously hardcoded n8n webhook endpoints and demo credentials have been purged from the active `HEAD` and replaced with environment variables (`CONTROL_TOWER_WEBHOOK_URL`, `CONTROL_TOWER_WEBHOOK_SECRET`), sensitive endpoints remain queryable in older git commits.
+> 
+> **Required Action:**
+> 1. Rotate the external n8n webhook trigger URL and re-issue the webhook secret token on the n8n orchestration instance.
+> 2. Regenerate `FASTAPI_INTERNAL_SECRET` and update both `.env` and deployment secrets.
+> 3. If preparing for public repository exposure, rewrite history using `git-filter-repo` or BFG Repo-Cleaner:
+>    ```bash
+>    git filter-repo --replace-text <(echo 'https://api.agents.snsihub.ai/==>REDACTED')
+>    ```
+
 
 

@@ -7,7 +7,7 @@ import { bomsService } from '../boms/boms.service';
 import type { UserRole } from '@prisma/client';
 
 export class PurchaseService {
-  async list(limit = 5, skip = 0, page = 1) {
+  async list(limit = 20, skip = 0, page = 1) {
     const [items, total] = await Promise.all([
       prisma.purchaseOrder.findMany({
         take: limit,
