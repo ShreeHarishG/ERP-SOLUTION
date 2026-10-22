@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryApi } from '@/services/inventory.api';
+import { useProgressiveList } from '@/hooks/useProgressiveList';
 import toast from 'react-hot-toast';
 
 export const useInventory = (productId?: string) => {
   const queryClient = useQueryClient();
 
   const useBalances = () => {
-    return useQuery({
+    return useProgressiveList({
       queryKey: ['inventory-balances'],
-      queryFn: () => inventoryApi.list(),
+      fetchPage: (params) => inventoryApi.list(params),
     });
   };
 

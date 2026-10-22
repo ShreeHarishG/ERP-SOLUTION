@@ -1,4 +1,6 @@
 import prisma from '@/lib/server/db';
+import { cacheInvalidatePrefix } from '@/lib/server/cache';
+import { toPageResult } from '@/lib/server/paginate';
 import { createAuditLog } from '@/lib/server/utils/auditLog';
 import type { UserRole } from '@prisma/client';
 import type {
@@ -9,10 +11,66 @@ import type {
 import { adjustOnHand, HEAVY_TX, release, reserve } from './stock-ledger';
 
 export class InventoryService {
-  async list() {
-    return prisma.product.findMany({
-      orderBy: { sku: 'asc' },
+  async list(limit = 5, skip = 0, page = 1) {
+    const [items, total] = await Promise.all([
+      prisma.product.findMany({
+        take: limit,
+        skip,
+        orderBy: { sku: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          category: true,
+          unitOfMeasure: true,
+          salesPrice: true,
+          costPrice: true,
+          onHandQuantity: true,
+          reservedQuantity: true,
+          minStockLevel: true,
+          reorderQuantity: true,
+          procurementType: true,
+          isActive: true,
+        },
+      }),
+      prisma.product.count(),
+    ]);
+
+    return toPageResult(items, total, { page, limit, offset: skip });
+  }
+
+  async summary() {
+    const products = await prisma.product.findMany({
+      select: {
+        onHandQuantity: true,
+        reservedQuantity: true,
+        costPrice: true,
+        minStockLevel: true,
+        procurementType: true,
+      },
     });
+
+    let inventoryValue = 0;
+    let reserved = 0;
+    let lowStock = 0;
+    let purchaseSkus = 0;
+
+    for (const product of products) {
+      const onHand = Number(product.onHandQuantity);
+      const reservedQty = Number(product.reservedQuantity);
+      inventoryValue += onHand * Number(product.costPrice);
+      reserved += reservedQty;
+      if (onHand - reservedQty <= Number(product.minStockLevel)) lowStock += 1;
+      if (product.procurementType === 'purchase') purchaseSkus += 1;
+    }
+
+    return {
+      total: products.length,
+      inventoryValue,
+      reserved,
+      lowStock,
+      incomingEstimate: purchaseSkus * 25,
+    };
   }
 
   async movementsLedger(productId?: string, limit = 50, skip = 0) {
@@ -80,6 +138,9 @@ export class InventoryService {
       );
 
       const product = await tx.product.findUnique({ where: { id: dto.productId } });
+      await cacheInvalidatePrefix('list:inventory');
+      await cacheInvalidatePrefix('list:products');
+      await cacheInvalidatePrefix('dashboard:');
       return { product, movement };
     }, HEAVY_TX);
   }

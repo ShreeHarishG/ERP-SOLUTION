@@ -10,10 +10,11 @@ import Link from 'next/link';
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import Skeleton from '@/components/ui/Skeleton';
+import { ListStatusBar } from '@/components/ui/ListStatusBar';
 
 export default function InventoryPage() {
   const { useBalances, adjustStock, isAdjusting } = useInventory();
-  const { data: products, isLoading, isError } = useBalances();
+  const { data: products, isLoading, isError, isFetchingMore, summary, total } = useBalances();
 
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -48,18 +49,13 @@ export default function InventoryPage() {
     }
   };
 
-  // Calculate top metrics from products balances
-  const totalValue = products?.reduce((acc, p) => acc + (Number(p.onHandQuantity) * Number(p.costPrice)), 0) || 0;
-  const lowStockCount = products
-    ? products.filter(p => {
-        const free = Number(p.onHandQuantity) - Number(p.reservedQuantity);
-        return free <= Number(p.minStockLevel);
-      }).length
-    : 0;
-  const totalReserved = products?.reduce((acc, p) => acc + Number(p.reservedQuantity), 0) || 0;
-  const incomingStock = products
-    ? (products.filter(p => p.procurementType === 'purchase').length * 25)
-    : 150;
+  const totalValue = summary?.inventoryValue ?? products?.reduce((acc, p) => acc + (Number(p.onHandQuantity) * Number(p.costPrice)), 0) ?? 0;
+  const lowStockCount = summary?.lowStock ?? products?.filter((p) => {
+    const free = Number(p.onHandQuantity) - Number(p.reservedQuantity);
+    return free <= Number(p.minStockLevel);
+  }).length ?? 0;
+  const totalReserved = summary?.reserved ?? products?.reduce((acc, p) => acc + Number(p.reservedQuantity), 0) ?? 0;
+  const incomingStock = summary?.incomingEstimate ?? (products ? products.filter((p) => p.procurementType === 'purchase').length * 25 : 150);
 
   return (
     <div className="space-y-6 animate-slide-up">
@@ -121,7 +117,10 @@ export default function InventoryPage() {
           ) : !products || products.length === 0 ? (
             <div className="p-12 text-center text-text-secondary">No stock balances found. Create products to display.</div>
           ) : (
-            <InventoryTable products={products} onAdjustClick={handleAdjustClick} />
+            <>
+              <InventoryTable products={products} onAdjustClick={handleAdjustClick} />
+              <ListStatusBar shown={products.length} total={total} isFetchingMore={isFetchingMore} />
+            </>
           )}
         </div>
       </div>

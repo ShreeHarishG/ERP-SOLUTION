@@ -58,9 +58,16 @@ export interface ApiPurchaseOrder {
 }
 
 export const purchaseApi = {
-  list: async (): Promise<ApiPurchaseOrder[]> => {
-    const res = await api.get('/purchase');
-    return res.data.data;
+  list: async (params?: { offset?: number; limit?: number; page?: number }) => {
+    const res = await api.get('/purchase', { params });
+    return res.data.data as {
+      items: ApiPurchaseOrder[];
+      page: number;
+      limit: number;
+      offset: number;
+      total: number;
+      hasMore: boolean;
+    };
   },
 
   create: async (payload: { productId: string; quantity: number }): Promise<ApiPurchaseOrder> => {

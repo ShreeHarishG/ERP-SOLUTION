@@ -1,15 +1,24 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { productsApi } from '@/services/products.api';
+import { useProgressiveList } from '@/hooks/useProgressiveList';
 import toast from 'react-hot-toast';
 
 export const useProducts = (filters?: any) => {
   const queryClient = useQueryClient();
 
   const useList = () => {
-    return useQuery({
+    const list = useProgressiveList({
       queryKey: ['products', filters],
-      queryFn: () => productsApi.list(filters),
+      fetchPage: (params) => productsApi.list({ ...filters, ...params }),
     });
+    return {
+      ...list,
+      data: {
+        products: list.data,
+        total: list.total,
+        hasMore: list.hasMore,
+      },
+    };
   };
 
   const useGet = (id: string) => {

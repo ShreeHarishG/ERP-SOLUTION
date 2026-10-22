@@ -1,24 +1,38 @@
 import prisma from '@/lib/server/db';
+import { toPageResult } from '@/lib/server/paginate';
 import { createAuditLog } from '@/lib/server/utils/auditLog';
 import type { UserRole } from '@prisma/client';
 import type { CreateBomInput } from './boms.validation';
 
 export class BomsService {
-  async list(options: { limit?: number; skip?: number } = {}) {
-    const { limit = 50, skip = 0 } = options;
-    return prisma.bom.findMany({
-      skip,
-      take: limit,
-      include: {
-        product: true,
-        items: {
-          include: {
-            component: true,
+  async list(options: { limit?: number; skip?: number; page?: number } = {}) {
+    const { limit = 5, skip = 0, page = 1 } = options;
+    const [items, total] = await Promise.all([
+      prisma.bom.findMany({
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          name: true,
+          productId: true,
+          quantity: true,
+          isActive: true,
+          createdAt: true,
+          product: { select: { id: true, sku: true, name: true } },
+          items: {
+            select: {
+              id: true,
+              quantity: true,
+              component: { select: { id: true, sku: true, name: true } },
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.bom.count(),
+    ]);
+
+    return toPageResult(items, total, { page, limit, offset: skip });
   }
 
   async getById(id: string) {

@@ -1,4 +1,6 @@
 import prisma from '@/lib/server/db';
+import { cacheInvalidatePrefix } from '@/lib/server/cache';
+import { toPageResult } from '@/lib/server/paginate';
 import { createAuditLog, createAuditLogs } from '@/lib/server/utils/auditLog';
 import { generateSalesOrderNumber } from '@/lib/server/utils/order-number';
 import { bomsService } from '../boms/boms.service';
@@ -7,6 +9,19 @@ import { Prisma, type UserRole } from '@prisma/client';
 import type { CreateSalesOrderInput } from './sales.validation';
 
 const PRICE_OVERRIDE_ROLES: UserRole[] = ['admin', 'product_manager'];
+
+const LIST_INCLUDE = {
+  items: {
+    select: {
+      id: true,
+      productId: true,
+      quantityOrdered: true,
+      unitPrice: true,
+      product: { select: { id: true, sku: true, name: true } },
+    },
+  },
+  creator: { select: { name: true } },
+} as const;
 
 const ORDER_INCLUDE = {
   items: {
@@ -74,13 +89,18 @@ type ShortageRow = {
 };
 
 export class SalesService {
-  async list(limit = 50, skip = 0) {
-    return prisma.salesOrder.findMany({
-      take: limit,
-      skip,
-      include: ORDER_INCLUDE,
-      orderBy: { createdAt: 'desc' },
-    });
+  async list(limit = 5, skip = 0, page = 1) {
+    const [items, total] = await Promise.all([
+      prisma.salesOrder.findMany({
+        take: limit,
+        skip,
+        include: LIST_INCLUDE,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.salesOrder.count(),
+    ]);
+
+    return toPageResult(items, total, { page, limit, offset: skip });
   }
 
   async getById(id: string) {
@@ -187,6 +207,8 @@ export class SalesService {
       },
     });
 
+    await cacheInvalidatePrefix('list:sales');
+    await cacheInvalidatePrefix('dashboard:');
     return fullOrder;
   }
 
@@ -380,6 +402,9 @@ export class SalesService {
       newValues: { status: updatedOrder.status },
     });
 
+    await cacheInvalidatePrefix('list:sales');
+    await cacheInvalidatePrefix('list:inventory');
+    await cacheInvalidatePrefix('dashboard:');
     return updatedOrder;
   }
 
@@ -463,6 +488,9 @@ export class SalesService {
       newValues: { status: 'delivered' },
     });
 
+    await cacheInvalidatePrefix('list:sales');
+    await cacheInvalidatePrefix('list:inventory');
+    await cacheInvalidatePrefix('dashboard:');
     return updatedOrder;
   }
 
@@ -540,6 +568,9 @@ export class SalesService {
       newValues: { status: 'cancelled' },
     });
 
+    await cacheInvalidatePrefix('list:sales');
+    await cacheInvalidatePrefix('list:inventory');
+    await cacheInvalidatePrefix('dashboard:');
     return updatedOrder;
   }
 }

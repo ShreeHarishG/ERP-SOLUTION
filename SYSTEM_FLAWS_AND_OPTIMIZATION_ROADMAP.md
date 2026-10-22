@@ -180,6 +180,19 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 
 ---
 
+### Flaw 15: Edge Middleware Intercepting Public Product Assets & Corrupt Image Encoding ([middleware.ts](file:///w:/chainiq/frontend/middleware.ts))
+* **Status:** `[x] RESOLVED & VERIFIED`
+* **Vulnerability:**
+  1. `frontend/middleware.ts` contained `pathname.startsWith('/products')` in `isProtectedRoute`. Requests for static public assets (`/products/bookshelf.png`, `/products/chair.png`, `/products/dining-table.png`) were intercepted and returned HTTP 307 redirects to `/login`.
+  2. The files in `public/products/` had JPEG JFIF headers (`ffd8ffe0`) saved under `.png` extensions.
+  3. When Next.js `_next/image` internal loader fetched the image, it received an HTML redirect string, failed parsing, and logged: `The requested resource isn't a valid image for /products/chair.png received null`.
+* **Engineering Solution:**
+  1. Updated `frontend/middleware.ts` to immediately bypass static asset extensions (`/\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|woff|woff2|ttf)$/`).
+  2. Processed all product images in `public/products/` through `sharp`, converting them into genuine, valid PNG format (`\x89PNG\r\n\x1a\n`).
+* **Verified Result:** Next.js Image optimizer returns HTTP 200 OK with `image/png` content-type on all product preview thumbnails.
+
+---
+
 ## 5. Comprehensive Action Plan Tracking Matrix
 
 | Priority | Issue / Optimization | Affected File(s) | Status | Verified Outcome |
@@ -195,3 +208,4 @@ Through a comprehensive, multi-phase systems engineering audit and surgical code
 | **P2** | **Wire LangGraph Agent Directly to FastAPI** | `fastapi/main.py`, `fastapi/agent.py` | **[x] RESOLVED** | Autonomous execution without external n8n webhook SPOF |
 | **P2** | **Native SQL Aggregation in AI Context Engine** | `lib/server/ai/ai-context.service.ts` | **[x] RESOLVED** | Fast SQL `_sum` aggregation replaces in-memory iteration |
 | **P2** | **Await Fire-and-Forget Security Audit Logs** | `lib/server/modules/auth/auth.service.ts`, `users.service.ts` | **[x] RESOLVED** | Zero lost audit logs during serverless execution teardown |
+| **P2** | **Bypass Static Assets in Middleware & Fix PNGs** | `middleware.ts`, `public/products/*` | **[x] RESOLVED** | Next.js image optimizer returns HTTP 200 OK for all products |

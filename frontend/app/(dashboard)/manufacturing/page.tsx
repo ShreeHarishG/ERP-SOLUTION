@@ -12,12 +12,13 @@ import { Button } from '@/components/ui/Button';
 import Badge from '@/components/ui/Badge';
 import Alert from '@/components/ui/Alert';
 import Link from 'next/link';
+import { ListStatusBar } from '@/components/ui/ListStatusBar';
 
 export default function ManufacturingPage() {
   const { useList, approve, reject, start, complete, isApproving, isRejecting, isStarting, isCompleting } = useManufacturing();
   const { user } = useAuth();
   const userRole = user?.role || 'sales';
-  const { data: orders, isLoading, isError } = useList();
+  const { data: orders, isLoading, isError, isFetchingMore, total } = useList();
 
   // Dialog / Modal States
   const [selectedMoId, setSelectedMoId] = useState<string | null>(null);
@@ -412,6 +413,7 @@ export default function ManufacturingPage() {
                 })}
               </tbody>
             </table>
+            <ListStatusBar shown={orders.length} total={total} isFetchingMore={isFetchingMore} />
           </div>
         )}
       </div>

@@ -1,4 +1,6 @@
 import prisma from '@/lib/server/db';
+import { cacheInvalidatePrefix } from '@/lib/server/cache';
+import { toPageResult } from '@/lib/server/paginate';
 import { createAuditLog } from '@/lib/server/utils/auditLog';
 import { generateManufacturingOrderNumber } from '@/lib/server/utils/order-number';
 import { bomsService } from '../boms/boms.service';
@@ -28,28 +30,51 @@ function mapMOStatus(mo: any) {
 }
 
 export class ManufacturingService {
-  async list(limit = 50, skip = 0) {
-    const orders = await prisma.manufacturingOrder.findMany({
-      take: limit,
-      skip,
-      include: {
-        product: true,
-        bom: {
-          include: {
-            items: {
-              include: {
-                component: true,
+  async list(limit = 5, skip = 0, page = 1) {
+    const [orders, total] = await Promise.all([
+      prisma.manufacturingOrder.findMany({
+        take: limit,
+        skip,
+        select: {
+          id: true,
+          orderNumber: true,
+          productId: true,
+          quantityToProduce: true,
+          quantityProduced: true,
+          status: true,
+          notes: true,
+          createdAt: true,
+          scheduledEnd: true,
+          triggeredBySoId: true,
+          product: { select: { id: true, sku: true, name: true, unitOfMeasure: true } },
+          creator: { select: { name: true } },
+          bom: {
+            select: {
+              id: true,
+              items: {
+                select: {
+                  quantity: true,
+                  unitOfMeasure: true,
+                  component: {
+                    select: {
+                      id: true,
+                      sku: true,
+                      name: true,
+                      onHandQuantity: true,
+                      reservedQuantity: true,
+                    },
+                  },
+                },
               },
             },
           },
         },
-        triggeredBySo: true,
-        creator: { select: { name: true } },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.manufacturingOrder.count(),
+    ]);
 
-    return orders.map(mapMOStatus);
+    return toPageResult(orders.map(mapMOStatus), total, { page, limit, offset: skip });
   }
 
   async getById(id: string) {

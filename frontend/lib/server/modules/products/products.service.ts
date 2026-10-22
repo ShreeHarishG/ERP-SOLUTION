@@ -10,9 +10,10 @@ export class ProductsService {
     procurementType?: string;
     page?: number;
     limit?: number;
+    offset?: number;
   } = {}) {
-    const { search, category, procurementType, page = 1, limit = 20 } = filters;
-    const skip = (page - 1) * limit;
+    const { search, category, procurementType, page = 1, limit = 5, offset } = filters;
+    const skip = offset !== undefined ? offset : (page - 1) * limit;
 
     const where: Record<string, any> = {};
 
@@ -42,10 +43,13 @@ export class ProductsService {
     ]);
 
     return {
+      items: products,
       products,
       total,
       page,
       limit,
+      offset: skip,
+      hasMore: skip + products.length < total,
       totalPages: Math.ceil(total / limit),
     };
   }

@@ -34,9 +34,16 @@ export interface ApiSalesOrder {
 }
 
 export const salesApi = {
-  list: async (): Promise<ApiSalesOrder[]> => {
-    const res = await api.get('/sales');
-    return res.data.data;
+  list: async (params?: { offset?: number; limit?: number; page?: number }) => {
+    const res = await api.get('/sales', { params });
+    return res.data.data as {
+      items: ApiSalesOrder[];
+      page: number;
+      limit: number;
+      offset: number;
+      total: number;
+      hasMore: boolean;
+    };
   },
 
   getById: async (id: string): Promise<ApiSalesOrder> => {

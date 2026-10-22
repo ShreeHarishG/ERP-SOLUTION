@@ -26,7 +26,17 @@ export const productsApi = {
     procurementType?: string;
     page?: number;
     limit?: number;
-  }): Promise<{ products: ApiProduct[]; total: number; page: number; limit: number; totalPages: number }> => {
+    offset?: number;
+  }): Promise<{
+    items: ApiProduct[];
+    products: ApiProduct[];
+    total: number;
+    page: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+    totalPages: number;
+  }> => {
     const res = await api.get('/products', { params });
     return res.data.data;
   },

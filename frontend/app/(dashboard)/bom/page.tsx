@@ -9,11 +9,12 @@ import { useAuth } from '@/hooks/useAuth';
 import Badge from '@/components/ui/Badge';
 import React, { useState } from 'react';
 import Skeleton from '@/components/ui/Skeleton';
+import { ListStatusBar } from '@/components/ui/ListStatusBar';
 
 export default function BomPage() {
   const { user } = useAuth();
   const { useList } = useBom();
-  const { data: boms, isLoading, isError } = useList();
+  const { data: boms, isLoading, isError, isFetchingMore, total } = useList();
   
   // Track expanded rows on the client
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
@@ -35,9 +36,14 @@ export default function BomPage() {
     <div className="space-y-6 animate-slide-up">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h1 className="page-title">Bills of Materials (BoM)</h1>
-          <p className="page-subtitle">Configure multi-level component recipes, raw material costings, and yields</p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#F8E7F6] flex items-center justify-center text-[#4B164C] shrink-0 shadow-xs border border-brand-accent/20">
+            <ClipboardList size={22} />
+          </div>
+          <div>
+            <h1 className="page-title">Bills of Materials (BoM)</h1>
+            <p className="page-subtitle">Configure multi-level component recipes, raw material costings, and yields</p>
+          </div>
         </div>
         {isPMOrAdmin && (
           <Link href="/bom/new" className="btn-primary text-xs flex items-center gap-1.5 bg-[#4B164C] hover:bg-[#381039]">
@@ -102,7 +108,8 @@ export default function BomPage() {
               />
             </div>
           ) : (
-            <table className="erp-table">
+            <>
+              <table className="erp-table">
               <thead>
                 <tr>
                   <th className="w-10"></th>
@@ -238,6 +245,8 @@ export default function BomPage() {
                 })}
               </tbody>
             </table>
+            <ListStatusBar shown={boms?.length || 0} total={total} isFetchingMore={isFetchingMore} />
+            </>
           )}
         </div>
       </div>

@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { manufacturingApi } from '@/services/manufacturing.api';
+import { useProgressiveList } from '@/hooks/useProgressiveList';
 import toast from 'react-hot-toast';
 
 export const useManufacturing = () => {
   const queryClient = useQueryClient();
 
   const useList = (options?: { enabled?: boolean }) => {
-    return useQuery({
+    return useProgressiveList({
       queryKey: ['manufacturing-orders'],
-      queryFn: () => manufacturingApi.list(),
+      fetchPage: (params) => manufacturingApi.list(params),
       enabled: options?.enabled,
     });
   };

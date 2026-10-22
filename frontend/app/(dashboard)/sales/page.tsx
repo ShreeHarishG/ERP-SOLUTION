@@ -11,11 +11,12 @@ import { Plus, ShoppingCart, Loader2, Calendar, User, Phone, Mail, AlertTriangle
 import Link from 'next/link';
 import React, { useState } from 'react';
 import EmptyState from '@/components/ui/EmptyState';
+import { ListStatusBar } from '@/components/ui/ListStatusBar';
 import { format } from 'date-fns';
 
 export default function SalesPage() {
   const { useList, confirm, deliver, isConfirming, isDelivering } = useSales();
-  const { data: orders, isLoading, isError } = useList();
+  const { data: orders, isLoading, isError, isFetchingMore, total } = useList();
   const { user } = useAuth();
   const isPMOrAdmin = user?.role === 'admin' || user?.role === 'product_manager';
 
@@ -102,7 +103,10 @@ export default function SalesPage() {
               />
             </div>
           ) : (
-            <SalesTable orders={orders} onViewDetails={handleViewDetails} />
+            <>
+              <SalesTable orders={orders} onViewDetails={handleViewDetails} />
+              <ListStatusBar shown={orders.length} total={total} isFetchingMore={isFetchingMore} />
+            </>
           )}
         </div>
       </div>

@@ -16,6 +16,9 @@ const envSchema = z.object({
   CONTROL_TOWER_WEBHOOK_SECRET: z.string().optional(),
   CONTROL_TOWER_OUTGOING_WEBHOOK: z.string().optional(),
   FRONTEND_ORIGIN: z.string().optional(),
+  REDIS_URL: z.string().optional(),
+  UPSTASH_REDIS_REST_URL: z.string().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 });
 
 function isBuildPhase() {
@@ -47,6 +50,9 @@ function parseEnv() {
         CONTROL_TOWER_WEBHOOK_SECRET: process.env.CONTROL_TOWER_WEBHOOK_SECRET,
         CONTROL_TOWER_OUTGOING_WEBHOOK: process.env.CONTROL_TOWER_OUTGOING_WEBHOOK,
         FRONTEND_ORIGIN: process.env.FRONTEND_ORIGIN,
+        REDIS_URL: process.env.REDIS_URL,
+        UPSTASH_REDIS_REST_URL: process.env.UPSTASH_REDIS_REST_URL,
+        UPSTASH_REDIS_REST_TOKEN: process.env.UPSTASH_REDIS_REST_TOKEN,
       };
     }
     throw new Error(message);

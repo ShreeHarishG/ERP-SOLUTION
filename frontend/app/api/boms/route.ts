@@ -3,6 +3,8 @@ import { createBomSchema } from '@/lib/server/modules/boms/boms.validation';
 import { requireRole, requireAuth, isErrorResponse } from '@/lib/server/auth';
 import { jsonSuccess, jsonError } from '@/lib/server/api-response';
 import { handleRoute } from '@/lib/server/handle-route';
+import { cached, cacheInvalidatePrefix, listCacheKey } from '@/lib/server/cache';
+import { parseListParams } from '@/lib/server/paginate';
 import type { UserRole } from '@prisma/client';
 
 export async function GET(request: Request) {
@@ -10,12 +12,11 @@ export async function GET(request: Request) {
     const user = await requireAuth();
     if (isErrorResponse(user)) return user;
 
-    const url = new URL(request.url);
-    const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '50', 10), 1), 100);
-    const skip = Math.max(parseInt(url.searchParams.get('skip') || '0', 10), 0);
-
-    const boms = await bomsService.list({ limit, skip });
-    return jsonSuccess(boms, 'BOMs fetched successfully');
+    const params = parseListParams(new URL(request.url));
+    const result = await cached(listCacheKey('boms', params.page, params.limit), () =>
+      bomsService.list({ limit: params.limit, skip: params.offset, page: params.page }),
+    );
+    return jsonSuccess(result, 'BOMs fetched successfully');
   });
 }
 
@@ -35,8 +36,9 @@ export async function POST(request: Request) {
       parsed.data,
       actor.sub,
       actor.name,
-      actor.role as UserRole
+      actor.role as UserRole,
     );
+    await cacheInvalidatePrefix('list:boms');
 
     return jsonSuccess(bom, 'BOM created successfully', 201);
   });

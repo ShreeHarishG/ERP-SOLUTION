@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { bomsApi } from '@/services/bom.api';
+import { useProgressiveList } from '@/hooks/useProgressiveList';
 import toast from 'react-hot-toast';
 
 export const useBom = () => {
   const queryClient = useQueryClient();
 
   const useList = () => {
-    return useQuery({
+    return useProgressiveList({
       queryKey: ['boms'],
-      queryFn: () => bomsApi.list(),
+      fetchPage: (params) => bomsApi.list(params),
     });
   };
 

@@ -15,15 +15,23 @@ export async function GET(request: Request) {
     const category = searchParams.get('category') ?? undefined;
     const procurementType = searchParams.get('procurementType') ?? undefined;
     const page = searchParams.get('page') ? Number(searchParams.get('page')) : 1;
-    const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : 20;
+    const limit = searchParams.get('limit') ? Number(searchParams.get('limit')) : 5;
+    const offset = searchParams.get('offset') ? Number(searchParams.get('offset')) : undefined;
 
-    const result = await productsService.list({
-      search,
-      category,
-      procurementType,
-      page,
-      limit,
-    });
+    const { cached, listCacheKey } = await import('@/lib/server/cache');
+    const result = await cached(
+      listCacheKey('products', page, limit, `${search || ''}:${category || ''}:${procurementType || ''}:${offset ?? ''}`),
+      () =>
+        productsService.list({
+          search,
+          category,
+          procurementType,
+          page,
+          limit,
+          offset,
+        }),
+      30,
+    );
 
     return jsonSuccess(result, 'Products fetched successfully');
   });

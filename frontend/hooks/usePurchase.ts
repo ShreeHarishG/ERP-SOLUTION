@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { purchaseApi } from '@/services/purchase.api';
+import { useProgressiveList } from '@/hooks/useProgressiveList';
 import toast from 'react-hot-toast';
 
 export const usePurchase = () => {
   const queryClient = useQueryClient();
 
   const useList = (options?: { enabled?: boolean }) => {
-    return useQuery({
+    return useProgressiveList({
       queryKey: ['purchase-orders'],
-      queryFn: () => purchaseApi.list(),
+      fetchPage: (params) => purchaseApi.list(params),
       enabled: options?.enabled,
     });
   };

@@ -1,9 +1,14 @@
 import prisma from '@/lib/server/db';
+import { cached } from '@/lib/server/cache';
 import { aiEngineService } from '@/lib/server/ai/ai-engine.service';
 
 export class DashboardService {
   async getStats(role: string = 'admin') {
     const normalizedRole = role.toLowerCase();
+    return cached(`dashboard:${normalizedRole}`, () => this.loadStats(normalizedRole), 30);
+  }
+
+  private async loadStats(normalizedRole: string) {
 
     // ─── 1. FAST PATH: SALES EXECUTIVE ─────────────────────────────────────
     if (normalizedRole === 'sales') {

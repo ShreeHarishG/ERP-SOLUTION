@@ -4,8 +4,17 @@ import { Providers } from './providers';
 import { Toaster } from 'react-hot-toast';
 
 export const metadata: Metadata = {
-  title: 'Shiv Furniture Works ERP',
-  description: 'Enterprise Resource Planning for Furniture Manufacturing',
+  title: 'Shiv Furniture Works ERP | ChainIQ',
+  description: 'Enterprise Resource Planning & Autonomous Control Tower for Furniture Manufacturing',
+  icons: {
+    icon: [
+      { url: '/icon.png', sizes: '64x64', type: 'image/png' },
+      { url: '/favicon.ico' },
+    ],
+    apple: [
+      { url: '/icon.png', sizes: '180x180', type: 'image/png' },
+    ],
+  },
 };
 
 export default function RootLayout({

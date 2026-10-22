@@ -36,7 +36,7 @@
 | # | Task | Severity | Why still open |
 |---|------|----------|----------------|
 | 7b | Refresh-token revoke / rotation / sessions table | P1 | Needs a `sessions` table, family id, and reuse detection. Rate limit + cookie-only tokens are in; server-side session store is not. |
-| 13 | Unpaginated lists + over-fetch | P2 | Inventory `list()` still returns all products. Sales/mfg lists still `include: { product: true }` deep. Shared `paginate()` helper not added. |
+| 13 | Unpaginated lists + over-fetch | P2 | **DONE this pass:** first 5 rows, then background load of the rest. Slim list selects. Redis/Upstash cache with memory fallback. |
 | 14 | Remaining query batching | P2 | Register + sales.create nested write done. BOM `createMany`, confirm bulk `UPDATE … FROM`, purchase/mfg loops still pending. |
 | 15 | Derived MO status stored | P2 | `mapMOStatus` still computes waiting/ready on read. |
 | 16 | Control-tower config in memory | P2 | Webhook URL is env-only now (so mode-from-env survives), but live `mode` toggle and stats still process-local. |

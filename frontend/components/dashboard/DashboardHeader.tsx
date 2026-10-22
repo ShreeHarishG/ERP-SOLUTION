@@ -3,6 +3,7 @@
 import React from 'react';
 import Breadcrumbs from '@/components/layout/Breadcrumbs';
 import Badge from '@/components/ui/Badge';
+import { LayoutDashboard, TrendingUp, Cpu, Truck, Warehouse } from 'lucide-react';
 import type { User } from '@/services/auth.api';
 
 interface DashboardHeaderProps {
@@ -16,6 +17,13 @@ export default function DashboardHeader({ userRole, user }: DashboardHeaderProps
       <div className="space-y-1">
         <Breadcrumbs items={[{ label: 'Dashboard' }]} />
         <div className="flex items-center gap-3 mt-1">
+          <div className="w-10 h-10 rounded-xl bg-[#F8E7F6] flex items-center justify-center shrink-0 shadow-xs border border-brand-accent/20">
+            {userRole === 'sales' && <TrendingUp size={20} className="text-pink-600" />}
+            {userRole === 'product_manager' && <Cpu size={20} className="text-[#4B164C]" />}
+            {userRole === 'purchase' && <Truck size={20} className="text-indigo-600" />}
+            {userRole === 'inventory' && <Warehouse size={20} className="text-amber-600" />}
+            {userRole === 'admin' && <LayoutDashboard size={20} className="text-amber-700" />}
+          </div>
           <h1 className="page-title text-2xl font-bold tracking-tight text-[#4B164C]">
             {userRole === 'sales' && 'Welcome Back, Priya Singh'}
             {userRole === 'product_manager' && 'Welcome Back, Ravi Sharma'}

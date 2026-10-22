@@ -3,6 +3,8 @@ import { createManufacturingOrderSchema } from '@/lib/server/modules/manufacturi
 import { requireRole, isErrorResponse } from '@/lib/server/auth';
 import { jsonSuccess, jsonError } from '@/lib/server/api-response';
 import { handleRoute } from '@/lib/server/handle-route';
+import { cached, cacheInvalidatePrefix, listCacheKey } from '@/lib/server/cache';
+import { parseListParams } from '@/lib/server/paginate';
 import type { UserRole } from '@prisma/client';
 
 export async function GET(request: Request) {
@@ -10,13 +12,11 @@ export async function GET(request: Request) {
     const user = await requireRole('admin', 'product_manager', 'sales');
     if (isErrorResponse(user)) return user;
 
-    const { searchParams } = new URL(request.url);
-    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '50', 10)));
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const skip = (page - 1) * limit;
-
-    const orders = await manufacturingService.list(limit, skip);
-    return jsonSuccess(orders, 'Manufacturing orders fetched successfully');
+    const params = parseListParams(new URL(request.url));
+    const result = await cached(listCacheKey('manufacturing', params.page, params.limit), () =>
+      manufacturingService.list(params.limit, params.offset, params.page),
+    );
+    return jsonSuccess(result, 'Manufacturing orders fetched successfully');
   });
 }
 
@@ -36,8 +36,10 @@ export async function POST(request: Request) {
       parsed.data.salesOrderId,
       actor.sub,
       actor.name,
-      actor.role as UserRole
+      actor.role as UserRole,
     );
+    await cacheInvalidatePrefix('list:manufacturing');
+    await cacheInvalidatePrefix('dashboard:');
 
     return jsonSuccess(created, 'Manufacturing request raised successfully', 201);
   });

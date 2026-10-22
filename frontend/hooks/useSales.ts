@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { salesApi } from '@/services/sales.api';
+import { useProgressiveList } from '@/hooks/useProgressiveList';
 import toast from 'react-hot-toast';
 
 export const useSales = () => {
   const queryClient = useQueryClient();
 
   const useList = (options?: { enabled?: boolean }) => {
-    return useQuery({
+    return useProgressiveList({
       queryKey: ['sales-orders'],
-      queryFn: () => salesApi.list(),
+      fetchPage: (params) => salesApi.list(params),
       enabled: options?.enabled,
     });
   };

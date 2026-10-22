@@ -1,25 +1,48 @@
 import prisma from '@/lib/server/db';
+import { cacheInvalidatePrefix } from '@/lib/server/cache';
+import { toPageResult } from '@/lib/server/paginate';
 import { createAuditLog } from '@/lib/server/utils/auditLog';
 import { generatePurchaseOrderNumber } from '@/lib/server/utils/order-number';
 import { bomsService } from '../boms/boms.service';
 import type { UserRole } from '@prisma/client';
 
 export class PurchaseService {
-  async list(limit = 50, skip = 0) {
-    return prisma.purchaseOrder.findMany({
-      take: limit,
-      skip,
-      include: {
-        items: {
-          include: { product: true },
+  async list(limit = 5, skip = 0, page = 1) {
+    const [items, total] = await Promise.all([
+      prisma.purchaseOrder.findMany({
+        take: limit,
+        skip,
+        select: {
+          id: true,
+          orderNumber: true,
+          vendorName: true,
+          status: true,
+          totalAmount: true,
+          createdAt: true,
+          expectedDelivery: true,
+          notes: true,
+          triggeredBySoId: true,
+          creator: { select: { name: true } },
+          items: {
+            select: {
+              id: true,
+              productId: true,
+              quantityOrdered: true,
+              quantityReceived: true,
+              unitCost: true,
+              product: { select: { id: true, sku: true, name: true, unitOfMeasure: true } },
+            },
+          },
+          quotations: {
+            select: { id: true, vendorName: true, totalAmount: true, status: true },
+          },
         },
-        triggeredBySo: true,
-        creator: { select: { name: true } },
-        quotations: true,
-        invoices: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.purchaseOrder.count(),
+    ]);
+
+    return toPageResult(items, total, { page, limit, offset: skip });
   }
 
   async getById(id: string) {

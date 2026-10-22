@@ -13,12 +13,13 @@ import Badge from '@/components/ui/Badge';
 import Alert from '@/components/ui/Alert';
 import Link from 'next/link';
 import { useVendors } from '@/hooks/useVendors';
+import { ListStatusBar } from '@/components/ui/ListStatusBar';
 
 export default function ProcurementPage() {
   const { useList, selectQuotation, sendRFQ, confirm: confirmPO, receive: receivePO, isSelectingQuotation, isConfirming, isReceiving, isSendingRFQ } = usePurchase();
   const { user } = useAuth();
   const userRole = user?.role || 'sales';
-  const { data: orders, isLoading, isError } = useList();
+  const { data: orders, isLoading, isError, isFetchingMore, total } = useList();
 
   // Selected PO state
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
@@ -468,6 +469,7 @@ export default function ProcurementPage() {
                 })}
               </tbody>
             </table>
+            <ListStatusBar shown={orders.length} total={total} isFetchingMore={isFetchingMore} />
           </div>
         )}
       </div>

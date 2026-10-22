@@ -10,12 +10,13 @@ import EmptyState from '@/components/ui/EmptyState';
 import Skeleton from '@/components/ui/Skeleton';
 import { usePurchase } from '@/hooks/usePurchase';
 import Modal from '@/components/ui/Modal';
+import { ListStatusBar } from '@/components/ui/ListStatusBar';
 
 export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [filterTab, setFilterTab] = useState<'all' | 'finished' | 'raw'>('all');
   const { useList, deleteProduct } = useProducts({ search });
-  const { data, isLoading, isError } = useList();
+  const { data, isLoading, isError, isFetchingMore } = useList();
   const { user } = useAuth();
   const userRole = user?.role || 'sales';
 
@@ -65,9 +66,14 @@ export default function ProductsPage() {
     <div className="space-y-6 animate-slide-up">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-        <div>
-          <h1 className="page-title">Products Master</h1>
-          <p className="page-subtitle">Configure finished assemblies, raw materials, and costing standard metrics</p>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#F8E7F6] flex items-center justify-center text-[#4B164C] shrink-0 shadow-xs border border-brand-accent/20">
+            <Package size={22} />
+          </div>
+          <div>
+            <h1 className="page-title">Products Master</h1>
+            <p className="page-subtitle">Configure finished assemblies, raw materials, and costing standard metrics</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Link href="/products/new" className="btn-primary text-xs flex items-center gap-1.5 bg-[#4B164C] hover:bg-[#381039]">
@@ -194,11 +200,18 @@ export default function ProductsPage() {
               />
             </div>
           ) : (
-            <ProductsTable
-              products={filteredProducts}
-              onDelete={handleDelete}
-              onOrderRawMaterial={handleOrderRawMaterial}
-            />
+            <>
+              <ProductsTable
+                products={filteredProducts}
+                onDelete={handleDelete}
+                onOrderRawMaterial={handleOrderRawMaterial}
+              />
+              <ListStatusBar
+                shown={filteredProducts.length}
+                total={data?.total}
+                isFetchingMore={isFetchingMore}
+              />
+            </>
           )}
         </div>
       </div>
