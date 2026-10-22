@@ -155,6 +155,7 @@ model SalesOrderItem {
   productId         String     @map("product_id") @db.Uuid
   quantityOrdered   Decimal    @map("quantity_ordered") @db.Decimal(12, 2)
   quantityDelivered Decimal    @default(0) @map("quantity_delivered") @db.Decimal(12, 2)
+  quantityReserved  Decimal    @default(0) @map("quantity_reserved") @db.Decimal(12, 2)
   unitPrice         Decimal    @map("unit_price") @db.Decimal(12, 2)
   createdAt         DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -433,4 +434,6 @@ enum AuditAction {
   stock_reservation_released
   shortage_detected
   bom_exploded
+  login
+  logout
 }

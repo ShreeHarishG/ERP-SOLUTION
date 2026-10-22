@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sparkles, X, Lightbulb, AlertTriangle, ArrowRight, MessageSquare, Send } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
 
 interface AiAssistantProps {
   isOpen: boolean;
@@ -12,7 +11,6 @@ interface AiAssistantProps {
 
 export const AiAssistant: React.FC<AiAssistantProps> = ({ isOpen, onClose }) => {
   const pathname = usePathname();
-  const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string }>>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -120,16 +118,13 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ isOpen, onClose }) => 
     setIsTyping(true);
 
     try {
-      const webhookUrl = 'https://api.agents.snsihub.ai/webhook/ffe27c5a-f302-478f-8c6e-723ddae680c8';
-      const userRole = user?.role || 'sales';
-      const response = await fetch(webhookUrl, {
+      const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           question: userMsg,
-          role: userRole,
         }),
       });
 
@@ -138,23 +133,12 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ isOpen, onClose }) => 
       }
 
       const resData = await response.json();
-
-      // Parse n8n webhook response format: { items: [{ json: "answer" }] }
-      let answer = '';
-      if (resData && Array.isArray(resData.items) && resData.items.length > 0) {
-        const firstItem = resData.items[0];
-        answer = typeof firstItem.json === 'string'
-          ? firstItem.json
-          : JSON.stringify(firstItem.json);
-      } else if (resData && typeof resData.answer === 'string') {
-        answer = resData.answer;
-      } else if (resData && typeof resData.output === 'string') {
-        answer = resData.output;
-      } else if (typeof resData === 'string') {
-        answer = resData;
-      } else {
-        answer = JSON.stringify(resData);
-      }
+      const answer =
+        typeof resData?.data?.answer === 'string'
+          ? resData.data.answer
+          : typeof resData?.answer === 'string'
+            ? resData.answer
+            : 'The AI copilot did not return a usable answer.';
 
       setMessages(prev => [...prev, { sender: 'ai', text: answer }]);
     } catch (err: any) {

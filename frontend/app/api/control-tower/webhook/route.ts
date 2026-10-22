@@ -1,17 +1,28 @@
-// =============================================================================
-// Autonomous Control Tower — Unified Webhook Endpoint
-// Ingests any agent payload, routes to external webhook or mock, delivers output
-// =============================================================================
-
 import { NextRequest, NextResponse } from 'next/server';
 import { controlTowerWebhookService } from '@/lib/server/control-tower/webhook-service';
+import { getCurrentUser, requireAuth, isErrorResponse } from '@/lib/server/auth';
+import { verifyHmacSignature } from '@/lib/server/utils/webhook-signature';
 import { UnifiedWebhookRequest } from '@/types/control-tower-agents';
 
 export async function POST(request: NextRequest) {
-  try {
-    const body = (await request.json()) as UnifiedWebhookRequest;
+  const rawBody = await request.text();
+  const secret = process.env.CONTROL_TOWER_WEBHOOK_SECRET || '';
+  const signature =
+    request.headers.get('x-control-tower-signature') ||
+    request.headers.get('x-webhook-signature');
+  const hmacOk = Boolean(secret) && verifyHmacSignature(rawBody, signature, secret);
+  const user = await getCurrentUser();
 
-    const result = await controlTowerWebhookService.processWebhook(body);
+  if (!hmacOk && !user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
+  }
+
+  try {
+    const body = JSON.parse(rawBody) as UnifiedWebhookRequest;
+    const result = await controlTowerWebhookService.processWebhook({
+      ...body,
+      callback_url: undefined,
+    });
 
     return NextResponse.json(result, {
       status: 200,
@@ -27,12 +38,15 @@ export async function POST(request: NextRequest) {
         error: error.message || 'Failed to process webhook request',
         timestamp: new Date().toISOString(),
       },
-      { status: 400 }
+      { status: 400 },
     );
   }
 }
 
 export async function GET() {
+  const user = await requireAuth();
+  if (isErrorResponse(user)) return user;
+
   const stats = controlTowerWebhookService.getStats();
   const config = controlTowerWebhookService.getConfig();
 

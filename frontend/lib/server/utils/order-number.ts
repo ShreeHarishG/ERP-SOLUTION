@@ -2,72 +2,46 @@ import type { Prisma } from '@prisma/client';
 
 type TransactionClient = Prisma.TransactionClient;
 
-export async function generateSalesOrderNumber(tx: TransactionClient): Promise<string> {
-  const latest = await tx.salesOrder.findFirst({
-    orderBy: { createdAt: 'desc' },
-    select: { orderNumber: true },
-  });
-
-  if (!latest?.orderNumber) {
-    return 'SO-001';
+async function nextPrefixedNumber(
+  tx: TransactionClient,
+  sequence: 'so_seq' | 'mo_seq' | 'po_seq',
+  prefix: 'SO' | 'MO' | 'PO',
+): Promise<string> {
+  try {
+    const rows = await tx.$queryRawUnsafe<Array<{ n: bigint | number }>>(
+      `SELECT nextval('${sequence}') AS n`,
+    );
+    const value = Number(rows[0]?.n ?? 1);
+    return `${prefix}-${String(value).padStart(3, '0')}`;
+  } catch {
+    await tx.$executeRawUnsafe(`CREATE SEQUENCE IF NOT EXISTS ${sequence}`);
+    const table =
+      prefix === 'SO' ? 'sales_orders' : prefix === 'MO' ? 'manufacturing_orders' : 'purchase_orders';
+    const maxRows = await tx.$queryRawUnsafe<Array<{ max: number | null }>>(
+      `SELECT MAX(CAST(substring(order_number FROM '[0-9]+$') AS INTEGER)) AS max
+       FROM ${table}
+       WHERE order_number ~ '^${prefix}-[0-9]+$'`,
+    );
+    const currentMax = Number(maxRows[0]?.max ?? 0);
+    if (currentMax > 0) {
+      await tx.$executeRawUnsafe(`SELECT setval('${sequence}', ${currentMax}, true)`);
+    }
+    const rows = await tx.$queryRawUnsafe<Array<{ n: bigint | number }>>(
+      `SELECT nextval('${sequence}') AS n`,
+    );
+    const value = Number(rows[0]?.n ?? 1);
+    return `${prefix}-${String(value).padStart(3, '0')}`;
   }
+}
 
-  const match = latest.orderNumber.match(/SO-(\d+)/);
-  const nextNum = match ? parseInt(match[1], 10) + 1 : 1;
-  return `SO-${String(nextNum).padStart(3, '0')}`;
+export async function generateSalesOrderNumber(tx: TransactionClient): Promise<string> {
+  return nextPrefixedNumber(tx, 'so_seq', 'SO');
 }
 
 export async function generateManufacturingOrderNumber(tx: TransactionClient): Promise<string> {
-  const latest = await tx.manufacturingOrder.findFirst({
-    orderBy: { createdAt: 'desc' },
-    select: { orderNumber: true },
-  });
-
-  // Filter out blank/empty order numbers that may exist from previous bugs
-  const lastValid = latest?.orderNumber?.match(/MO-(\d+)/)
-    ? latest.orderNumber
-    : null;
-
-  if (!lastValid) {
-    // Scan all to find the highest existing MO number
-    const all = await tx.manufacturingOrder.findMany({
-      select: { orderNumber: true },
-    });
-    const numbers = all
-      .map((o) => { const m = o.orderNumber?.match(/MO-(\d+)/); return m ? parseInt(m[1], 10) : 0; })
-      .filter((n) => n > 0);
-    const maxNum = numbers.length > 0 ? Math.max(...numbers) : 0;
-    return `MO-${String(maxNum + 1).padStart(3, '0')}`;
-  }
-
-  const match = lastValid.match(/MO-(\d+)/);
-  const nextNum = match ? parseInt(match[1], 10) + 1 : 1;
-  return `MO-${String(nextNum).padStart(3, '0')}`;
+  return nextPrefixedNumber(tx, 'mo_seq', 'MO');
 }
 
 export async function generatePurchaseOrderNumber(tx: TransactionClient): Promise<string> {
-  const latest = await tx.purchaseOrder.findFirst({
-    orderBy: { createdAt: 'desc' },
-    select: { orderNumber: true },
-  });
-
-  const lastValid = latest?.orderNumber?.match(/PO-(\d+)/)
-    ? latest.orderNumber
-    : null;
-
-  if (!lastValid) {
-    const all = await tx.purchaseOrder.findMany({
-      select: { orderNumber: true },
-    });
-    const numbers = all
-      .map((o) => { const m = o.orderNumber?.match(/PO-(\d+)/); return m ? parseInt(m[1], 10) : 0; })
-      .filter((n) => n > 0);
-    const maxNum = numbers.length > 0 ? Math.max(...numbers) : 0;
-    return `PO-${String(maxNum + 1).padStart(3, '0')}`;
-  }
-
-  const match = lastValid.match(/PO-(\d+)/);
-  const nextNum = match ? parseInt(match[1], 10) + 1 : 1;
-  return `PO-${String(nextNum).padStart(3, '0')}`;
+  return nextPrefixedNumber(tx, 'po_seq', 'PO');
 }
-

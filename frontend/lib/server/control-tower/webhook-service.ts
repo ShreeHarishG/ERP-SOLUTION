@@ -14,6 +14,7 @@ import {
   CONTROL_TOWER_AGENTS,
   INITIAL_COMMON_EVENT,
 } from '@/lib/mock-data/control-tower-agents';
+import { assertSafeHttpUrl } from '@/lib/server/utils/safe-url';
 
 // Runtime configuration singleton
 let towerConfig: ControlTowerConfig = {
@@ -49,13 +50,15 @@ export class ControlTowerWebhookService {
   }
 
   /**
-   * Update configuration (Admin only)
+   * Admin may toggle mode only. URLs always come from env.
    */
-  updateConfig(newConfig: Partial<ControlTowerConfig>): ControlTowerConfig {
-    towerConfig = {
-      ...towerConfig,
-      ...newConfig,
-    };
+  updateConfig(patch: { mode?: ControlTowerConfig['mode'] }): ControlTowerConfig {
+    if (patch.mode === 'mock' || patch.mode === 'webhook') {
+      towerConfig.mode = patch.mode;
+    }
+    towerConfig.webhookUrl = process.env.CONTROL_TOWER_WEBHOOK_URL || '';
+    towerConfig.webhookSecret = process.env.CONTROL_TOWER_WEBHOOK_SECRET || '';
+    towerConfig.outgoingCallbackUrl = process.env.CONTROL_TOWER_OUTGOING_WEBHOOK || '';
     return this.getConfig();
   }
 
@@ -68,7 +71,8 @@ export class ControlTowerWebhookService {
     httpStatus: number;
     message: string;
   }> {
-    const targetUrl = url || towerConfig.webhookUrl;
+    void url;
+    const targetUrl = process.env.CONTROL_TOWER_WEBHOOK_URL || '';
     if (!targetUrl) {
       return {
         status: 'offline',
@@ -78,12 +82,24 @@ export class ControlTowerWebhookService {
       };
     }
 
+    let safeUrl: string;
+    try {
+      safeUrl = assertSafeHttpUrl(targetUrl);
+    } catch (err: any) {
+      return {
+        status: 'offline',
+        latencyMs: 0,
+        httpStatus: 400,
+        message: err.message || 'Webhook URL is not allowed',
+      };
+    }
+
     const start = Date.now();
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000); // 4s timeout
 
-      const response = await fetch(targetUrl, {
+      const response = await fetch(safeUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -189,10 +205,11 @@ export class ControlTowerWebhookService {
     // 1. Check if Single External Webhook Mode is enabled
     if (towerConfig.mode === 'webhook' && towerConfig.webhookUrl) {
       try {
+        const safeUrl = assertSafeHttpUrl(towerConfig.webhookUrl);
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 6000);
 
-        const response = await fetch(towerConfig.webhookUrl, {
+        const response = await fetch(safeUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -269,7 +286,7 @@ export class ControlTowerWebhookService {
     );
 
     // 4. Outgoing Webhook Dispatcher
-    const callbackTarget = request.callback_url || towerConfig.outgoingCallbackUrl;
+    const callbackTarget = towerConfig.outgoingCallbackUrl;
     let callbackStatus: UnifiedWebhookResponse['callback_status'] = undefined;
 
     if (callbackTarget) {
@@ -305,10 +322,11 @@ export class ControlTowerWebhookService {
     data: Record<string, any>
   ): Promise<{ delivered: boolean; url: string; status_code?: number }> {
     try {
+      const safeUrl = assertSafeHttpUrl(url);
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 4000);
 
-      const res = await fetch(url, {
+      const res = await fetch(safeUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

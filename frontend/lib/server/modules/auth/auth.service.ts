@@ -1,3 +1,4 @@
+import { Prisma, type AuditAction } from '@prisma/client';
 import prisma from '@/lib/server/db';
 import { comparePassword, hashPassword } from '@/lib/server/utils/password';
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from '@/lib/server/utils/jwt';
@@ -7,31 +8,32 @@ import type { RegisterInput } from '@/lib/server/modules/auth/auth.validation';
 
 export class AuthService {
   async register(dto: RegisterInput): Promise<AuthResponse> {
-    const existingUser = await prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase().trim() },
-    });
-
-    if (existingUser) {
-      throw Object.assign(new Error('Email is already registered'), { statusCode: 409 });
-    }
-
     const hashedPassword = await hashPassword(dto.password);
+    const existingCount = await prisma.user.count();
 
-    const user = await prisma.user.create({
-      data: {
-        name: dto.name,
-        email: dto.email.toLowerCase().trim(),
-        passwordHash: hashedPassword,
-        role: 'admin',
-        isActive: true,
-        companyName: dto.companyName,
-        phone: dto.phone,
-        country: dto.country,
-        language: dto.language,
-        companySize: dto.companySize,
-        primaryInterest: dto.primaryInterest,
-      },
-    });
+    let user;
+    try {
+      user = await prisma.user.create({
+        data: {
+          name: dto.name,
+          email: dto.email.toLowerCase().trim(),
+          passwordHash: hashedPassword,
+          role: existingCount === 0 ? 'admin' : 'sales',
+          isActive: true,
+          companyName: dto.companyName,
+          phone: dto.phone,
+          country: dto.country,
+          language: dto.language,
+          companySize: dto.companySize,
+          primaryInterest: dto.primaryInterest,
+        },
+      });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw Object.assign(new Error('Email is already registered'), { statusCode: 409 });
+      }
+      throw err;
+    }
 
     const jwtPayload: Omit<JwtPayload, 'iat' | 'exp'> = {
       sub: user.id,
@@ -94,11 +96,11 @@ export class AuthService {
     const accessToken = generateAccessToken(jwtPayload);
     const refreshToken = generateRefreshToken(jwtPayload);
 
-    await createAuditLog({
+    void createAuditLog({
       userId: user.id,
       userName: user.name,
       userRole: user.role,
-      action: 'user_updated',
+      action: 'login' as AuditAction,
       entityType: 'session',
       entityName: user.email,
     });
@@ -115,7 +117,7 @@ export class AuthService {
     };
   }
 
-  async refresh(refreshToken: string): Promise<{ accessToken: string }> {
+  async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
     try {
       const payload = verifyRefreshToken(refreshToken);
 
@@ -131,7 +133,14 @@ export class AuthService {
         name: user.name,
       });
 
-      return { accessToken: newAccessToken };
+      const newRefreshToken = generateRefreshToken({
+        sub: user.id,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+      });
+
+      return { accessToken: newAccessToken, refreshToken: newRefreshToken };
     } catch {
       throw Object.assign(new Error('Invalid or expired refresh token'), { statusCode: 401 });
     }

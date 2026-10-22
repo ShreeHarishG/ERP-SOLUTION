@@ -55,9 +55,10 @@ export class AIEngineService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-internal-secret': process.env.FASTAPI_INTERNAL_SECRET || '',
+          'x-user-role': role,
         },
         body: JSON.stringify({
-          role,
           context,
         }),
         signal: controller.signal,

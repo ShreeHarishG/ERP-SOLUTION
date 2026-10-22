@@ -1,6 +1,6 @@
 import { authService } from '@/lib/server/modules/auth/auth.service';
 import { jsonSuccess, jsonError } from '@/lib/server/api-response';
-import { getRefreshToken, setAccessTokenCookie } from '@/lib/server/cookies';
+import { getRefreshToken, setAuthCookies } from '@/lib/server/cookies';
 import { handleRoute } from '@/lib/server/handle-route';
 
 export async function POST(request: Request) {
@@ -20,8 +20,8 @@ export async function POST(request: Request) {
       return jsonError('Refresh token missing', 401);
     }
 
-    const { accessToken } = await authService.refresh(token);
-    const response = jsonSuccess({ accessToken }, 'Token refreshed');
-    return setAccessTokenCookie(response, accessToken);
+    const { accessToken, refreshToken: newRefreshToken } = await authService.refresh(token);
+    const response = jsonSuccess({ ok: true }, 'Token refreshed');
+    return setAuthCookies(response, accessToken, newRefreshToken, true);
   });
 }

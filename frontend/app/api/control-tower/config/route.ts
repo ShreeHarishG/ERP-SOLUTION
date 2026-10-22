@@ -1,50 +1,43 @@
-// =============================================================================
-// Autonomous Control Tower — Admin Configuration & Webhook Health Probe
-// Stealth Mode: Allows Admin to switch between Single Webhook & Mock Data Mode
-// =============================================================================
-
 import { NextRequest, NextResponse } from 'next/server';
 import { controlTowerWebhookService } from '@/lib/server/control-tower/webhook-service';
-import { getCurrentUser } from '@/lib/server/auth';
+import { requireAuth, requireRole, isErrorResponse } from '@/lib/server/auth';
 
-export async function GET(request: NextRequest) {
-  const user = await getCurrentUser(request);
-  const isAdmin = user?.role === 'admin';
-
+function publicConfig() {
   const config = controlTowerWebhookService.getConfig();
   const stats = controlTowerWebhookService.getStats();
+  return {
+    mode: config.mode,
+    hasWebhook: Boolean(config.webhookUrl),
+    hasOutgoingCallback: Boolean(config.outgoingCallbackUrl),
+    simulateLatency: config.simulateLatency,
+    lastHealthCheck: config.lastHealthCheck,
+    stats,
+  };
+}
 
-  // If not admin, return sanitized config without sensitive tokens
-  if (!isAdmin) {
-    return NextResponse.json({
-      mode: config.mode,
-      hasWebhook: Boolean(config.webhookUrl),
-      hasOutgoingCallback: Boolean(config.outgoingCallbackUrl),
-      stats,
-      isAdmin: false,
-    });
-  }
+export async function GET() {
+  const user = await requireAuth();
+  if (isErrorResponse(user)) return user;
 
   return NextResponse.json({
-    ...config,
-    stats,
-    isAdmin: true,
+    ...publicConfig(),
+    isAdmin: user.role === 'admin',
   });
 }
 
 export async function POST(request: NextRequest) {
-  const user = await getCurrentUser(request);
-  if (user && user.role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized: Admin role required' }, { status: 403 });
-  }
+  const user = await requireRole('admin');
+  if (isErrorResponse(user)) return user;
 
   try {
-    const body = await request.json();
-    const updated = controlTowerWebhookService.updateConfig(body);
+    const body = await request.json().catch(() => ({}));
+    const updated = controlTowerWebhookService.updateConfig({
+      mode: body?.mode === 'webhook' ? 'webhook' : 'mock',
+    });
 
     return NextResponse.json({
       success: true,
-      config: updated,
+      config: publicConfig(),
       message: `Control Tower updated to ${updated.mode === 'webhook' ? 'Live Single Webhook' : 'Simulated Mock Engine'} mode.`,
     });
   } catch (error: any) {
@@ -52,12 +45,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT /api/control-tower/config -> Ping health check
-export async function PUT(request: NextRequest) {
-  try {
-    const body = await request.json().catch(() => ({}));
-    const pingResult = await controlTowerWebhookService.pingWebhook(body.url);
+export async function PUT() {
+  const user = await requireRole('admin');
+  if (isErrorResponse(user)) return user;
 
+  try {
+    const pingResult = await controlTowerWebhookService.pingWebhook();
     return NextResponse.json(pingResult);
   } catch (error: any) {
     return NextResponse.json(
@@ -67,7 +60,7 @@ export async function PUT(request: NextRequest) {
         httpStatus: 500,
         message: error.message || 'Health check failed',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

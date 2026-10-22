@@ -1,4 +1,3 @@
-import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/server/db';
 import { generateAccessToken, generateRefreshToken } from '@/lib/server/utils/jwt';
 import { setAuthCookies } from '@/lib/server/cookies';
@@ -13,23 +12,21 @@ const DEMO_ACCOUNTS: Record<string, string> = {
   inventory: 'neha@shivfurniture.com',
 };
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   return handleRoute(async () => {
-    // Only permit role sandbox switching in development or non-production
-    if (process.env.NODE_ENV === 'production' && process.env.ENABLE_ROLE_SWITCHER !== 'true') {
-      return jsonError('Role switching is disabled in production environments', 403);
+    if (process.env.NODE_ENV !== 'development') {
+      return jsonError('Not found', 404);
     }
 
     const body = await request.json();
-    const targetRole = body?.role;
-    const targetEmail = body?.email || DEMO_ACCOUNTS[targetRole];
+    const targetEmail = DEMO_ACCOUNTS[body?.role];
 
     if (!targetEmail) {
-      return jsonError('Invalid target role or email for sandbox switch', 400);
+      return jsonError('Invalid sandbox role', 400);
     }
 
     const user = await prisma.user.findUnique({
-      where: { email: targetEmail.toLowerCase().trim() },
+      where: { email: targetEmail },
     });
 
     if (!user || !user.isActive) {
@@ -55,7 +52,7 @@ export async function POST(request: NextRequest) {
           name: user.name,
         },
       },
-      `Switched to ${user.role} role sandbox`
+      `Switched to ${user.role} role sandbox`,
     );
 
     return setAuthCookies(response, accessToken, refreshToken, true);

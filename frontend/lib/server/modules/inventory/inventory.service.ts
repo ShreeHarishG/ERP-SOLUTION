@@ -6,6 +6,7 @@ import type {
   InventoryReserveInput,
   InventoryReleaseInput,
 } from './inventory.validation';
+import { adjustOnHand, HEAVY_TX, release, reserve } from './stock-ledger';
 
 export class InventoryService {
   async list() {
@@ -15,7 +16,7 @@ export class InventoryService {
   }
 
   async movementsLedger(productId?: string, limit = 50, skip = 0) {
-    const where: Record<string, any> = {};
+    const where: Record<string, unknown> = {};
     if (productId) {
       where.productId = productId;
     }
@@ -25,7 +26,7 @@ export class InventoryService {
       take: limit,
       skip,
       include: {
-        product: true,
+        product: { select: { id: true, sku: true, name: true } },
         creator: { select: { name: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -38,80 +39,49 @@ export class InventoryService {
     actorName: string,
     actorRole: UserRole,
   ) {
-    const result = await prisma.$transaction(async (tx) => {
-      // P0 Concurrency Protection: Row-level lock (FOR UPDATE)
-      const products = await tx.$queryRaw<any[]>`
-        SELECT id, name, on_hand_quantity as "onHandQuantity", reserved_quantity as "reservedQuantity"
-        FROM products
-        WHERE id = ${dto.productId}::uuid
-        FOR UPDATE
-      `;
-
-      const product = products[0];
-      if (!product) {
-        throw Object.assign(new Error('Product not found'), { statusCode: 404 });
-      }
-
-      const onHand = Number(product.onHandQuantity);
-      const reserved = Number(product.reservedQuantity);
-      const newOnHand = onHand + dto.quantity;
-
-      if (newOnHand < 0) {
-        throw Object.assign(new Error('Physical stock cannot be adjusted below zero'), {
-          statusCode: 400,
-        });
-      }
-
-      if (newOnHand < reserved) {
-        throw Object.assign(
-          new Error(`Cannot adjust stock below reservation commitments. Minimum required: ${reserved}`),
-          { statusCode: 400 }
-        );
-      }
-
-      const updatedProduct = await tx.product.update({
-        where: { id: dto.productId },
-        data: { onHandQuantity: newOnHand },
-      });
+    return prisma.$transaction(async (tx) => {
+      const mutation = await adjustOnHand(tx, dto.productId, dto.quantity);
 
       const movement = await tx.inventoryMovement.create({
         data: {
           productId: dto.productId,
           movementType: 'stock_adjustment',
-          quantity: Math.abs(dto.quantity),
+          quantity: mutation.quantity,
           direction: dto.quantity > 0 ? 1 : -1,
-          quantityBefore: onHand,
-          quantityAfter: newOnHand,
-          reservedBefore: reserved,
-          reservedAfter: reserved,
+          quantityBefore: mutation.onHandBefore,
+          quantityAfter: mutation.onHandAfter,
+          reservedBefore: mutation.reservedBefore,
+          reservedAfter: mutation.reservedAfter,
           notes: dto.notes || 'Manual stock adjustment',
           createdBy: actorId,
         },
         include: {
-          product: true,
+          product: { select: { id: true, sku: true, name: true } },
           creator: { select: { name: true } },
         },
       });
 
-      return { product: updatedProduct, movement, originalProduct: product, newOnHand };
-    });
+      await createAuditLog(
+        {
+          userId: actorId,
+          userName: actorName,
+          userRole: actorRole,
+          action: 'stock_adjusted',
+          entityType: 'product',
+          entityId: mutation.id,
+          entityName: mutation.name,
+          newValues: {
+            onHandQuantity: mutation.onHandAfter,
+            adjustment: dto.quantity,
+            notes: dto.notes,
+          },
+        },
+        tx,
+      );
 
-    await createAuditLog({
-      userId: actorId,
-      userName: actorName,
-      userRole: actorRole,
-      action: 'stock_adjusted',
-      entityType: 'product',
-      entityId: result.originalProduct.id,
-      entityName: result.originalProduct.name,
-      newValues: {
-        onHandQuantity: result.newOnHand,
-        adjustment: dto.quantity,
-        notes: dto.notes,
-      },
-    });
-
-    return { product: result.product, movement: result.movement };
+      const product = await tx.product.findUnique({ where: { id: dto.productId } });
+      return { product, movement };
+    }, HEAVY_TX);
   }
 
   async reserveStock(
@@ -121,36 +91,7 @@ export class InventoryService {
     actorRole: UserRole,
   ) {
     return prisma.$transaction(async (tx) => {
-      // Row-level lock to prevent concurrent over-reservation
-      const products = await tx.$queryRaw<any[]>`
-        SELECT id, name, on_hand_quantity as "onHandQuantity", reserved_quantity as "reservedQuantity"
-        FROM products
-        WHERE id = ${dto.productId}::uuid
-        FOR UPDATE
-      `;
-
-      const product = products[0];
-      if (!product) {
-        throw Object.assign(new Error('Product not found'), { statusCode: 404 });
-      }
-
-      const onHand = Number(product.onHandQuantity);
-      const reserved = Number(product.reservedQuantity);
-      const free = Math.max(0, onHand - reserved);
-
-      if (dto.quantity > free) {
-        throw Object.assign(
-          new Error(`Insufficient free stock available to reserve. Available: ${free}`),
-          { statusCode: 400 }
-        );
-      }
-
-      const newReserved = reserved + dto.quantity;
-
-      const updatedProduct = await tx.product.update({
-        where: { id: dto.productId },
-        data: { reservedQuantity: newReserved },
-      });
+      const mutation = await reserve(tx, dto.productId, dto.quantity);
 
       await tx.inventoryMovement.create({
         data: {
@@ -158,33 +99,36 @@ export class InventoryService {
           movementType: 'stock_reservation',
           quantity: dto.quantity,
           direction: -1,
-          quantityBefore: onHand,
-          quantityAfter: onHand,
-          reservedBefore: reserved,
-          reservedAfter: newReserved,
+          quantityBefore: mutation.onHandBefore,
+          quantityAfter: mutation.onHandAfter,
+          reservedBefore: mutation.reservedBefore,
+          reservedAfter: mutation.reservedAfter,
           referenceSoId: dto.referenceSoId || null,
-          notes: dto.notes || `Stock reserved manually`,
+          notes: dto.notes || 'Stock reserved manually',
           createdBy: actorId,
         },
       });
 
-      await createAuditLog({
-        userId: actorId,
-        userName: actorName,
-        userRole: actorRole,
-        action: 'stock_reserved',
-        entityType: 'product',
-        entityId: product.id,
-        entityName: product.name,
-        newValues: {
-          reservedQuantity: newReserved,
-          quantityReserved: dto.quantity,
-          referenceSoId: dto.referenceSoId,
+      await createAuditLog(
+        {
+          userId: actorId,
+          userName: actorName,
+          userRole: actorRole,
+          action: 'stock_reserved',
+          entityType: 'product',
+          entityId: mutation.id,
+          entityName: mutation.name,
+          newValues: {
+            reservedQuantity: mutation.reservedAfter,
+            quantityReserved: dto.quantity,
+            referenceSoId: dto.referenceSoId,
+          },
         },
-      });
+        tx,
+      );
 
-      return updatedProduct;
-    });
+      return tx.product.findUnique({ where: { id: dto.productId } });
+    }, HEAVY_TX);
   }
 
   async releaseStock(
@@ -194,35 +138,7 @@ export class InventoryService {
     actorRole: UserRole,
   ) {
     return prisma.$transaction(async (tx) => {
-      // Row-level lock to prevent concurrent release anomalies
-      const products = await tx.$queryRaw<any[]>`
-        SELECT id, name, on_hand_quantity as "onHandQuantity", reserved_quantity as "reservedQuantity"
-        FROM products
-        WHERE id = ${dto.productId}::uuid
-        FOR UPDATE
-      `;
-
-      const product = products[0];
-      if (!product) {
-        throw Object.assign(new Error('Product not found'), { statusCode: 404 });
-      }
-
-      const onHand = Number(product.onHandQuantity);
-      const reserved = Number(product.reservedQuantity);
-
-      if (dto.quantity > reserved) {
-        throw Object.assign(
-          new Error(`Cannot release more stock than currently reserved. Reserved: ${reserved}`),
-          { statusCode: 400 }
-        );
-      }
-
-      const newReserved = reserved - dto.quantity;
-
-      const updatedProduct = await tx.product.update({
-        where: { id: dto.productId },
-        data: { reservedQuantity: newReserved },
-      });
+      const mutation = await release(tx, dto.productId, dto.quantity);
 
       await tx.inventoryMovement.create({
         data: {
@@ -230,33 +146,36 @@ export class InventoryService {
           movementType: 'reservation_release',
           quantity: dto.quantity,
           direction: 1,
-          quantityBefore: onHand,
-          quantityAfter: onHand,
-          reservedBefore: reserved,
-          reservedAfter: newReserved,
+          quantityBefore: mutation.onHandBefore,
+          quantityAfter: mutation.onHandAfter,
+          reservedBefore: mutation.reservedBefore,
+          reservedAfter: mutation.reservedAfter,
           referenceSoId: dto.referenceSoId || null,
-          notes: dto.notes || `Stock reservation released manually`,
+          notes: dto.notes || 'Stock reservation released manually',
           createdBy: actorId,
         },
       });
 
-      await createAuditLog({
-        userId: actorId,
-        userName: actorName,
-        userRole: actorRole,
-        action: 'stock_reservation_released',
-        entityType: 'product',
-        entityId: product.id,
-        entityName: product.name,
-        newValues: {
-          reservedQuantity: newReserved,
-          quantityReleased: dto.quantity,
-          referenceSoId: dto.referenceSoId,
+      await createAuditLog(
+        {
+          userId: actorId,
+          userName: actorName,
+          userRole: actorRole,
+          action: 'stock_reservation_released',
+          entityType: 'product',
+          entityId: mutation.id,
+          entityName: mutation.name,
+          newValues: {
+            reservedQuantity: mutation.reservedAfter,
+            quantityReleased: dto.quantity,
+            referenceSoId: dto.referenceSoId,
+          },
         },
-      });
+        tx,
+      );
 
-      return updatedProduct;
-    });
+      return tx.product.findUnique({ where: { id: dto.productId } });
+    }, HEAVY_TX);
   }
 }
 

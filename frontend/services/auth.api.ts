@@ -29,12 +29,12 @@ export interface User {
 
 export const authApi = {
   register: async (payload: RegisterPayload) => {
-    const res = await api.post<{ data: { user: User; accessToken: string } }>('/auth/register', payload);
+    const res = await api.post<{ data: { user: User } }>('/auth/register', payload);
     return res.data.data;
   },
 
   login: async (payload: LoginPayload) => {
-    const res = await api.post<{ data: { user: User; accessToken: string } }>('/auth/login', payload);
+    const res = await api.post<{ data: { user: User } }>('/auth/login', payload);
     return res.data.data;
   },
 

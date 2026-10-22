@@ -73,9 +73,9 @@ export default function ControlTowerAgentsPage() {
         if (data) {
           setConfig({
             mode: data.mode || 'mock',
-            webhookUrl: data.webhookUrl || '',
-            webhookSecret: data.webhookSecret || '',
-            outgoingCallbackUrl: data.outgoingCallbackUrl || '',
+            webhookUrl: data.hasWebhook ? 'configured' : '',
+            webhookSecret: '',
+            outgoingCallbackUrl: data.hasOutgoingCallback ? 'configured' : '',
             simulateLatency: data.simulateLatency ?? true,
             lastHealthCheck: data.lastHealthCheck,
           });
@@ -104,7 +104,7 @@ export default function ControlTowerAgentsPage() {
       const res = await fetch('/api/control-tower/config', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: config.webhookUrl }),
+        body: JSON.stringify({}),
       });
       const data = await res.json();
       setPingResult(data);
@@ -125,7 +125,7 @@ export default function ControlTowerAgentsPage() {
       const res = await fetch('/api/control-tower/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ mode: config.mode }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -617,49 +617,18 @@ export default function ControlTowerAgentsPage() {
               )}
             </div>
 
-            {/* Single Webhook Inputs */}
-            <div className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">
-                  Single Ingestion Webhook URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://your-server.com/api/agent-pipeline or http://localhost:8000/webhook"
-                  value={config.webhookUrl}
-                  onChange={(e) => setConfig({ ...config, webhookUrl: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-slate-800"
-                />
-                <p className="text-[10px] text-slate-400">
-                  All 14 model invocations will route through this single URL when in Webhook Mode.
-                </p>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">
-                  Webhook Secret / Bearer Token (Optional)
-                </label>
-                <input
-                  type="password"
-                  placeholder="Bearer token or authorization header"
-                  value={config.webhookSecret}
-                  onChange={(e) => setConfig({ ...config, webhookSecret: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-slate-800"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700">
-                  Default Outgoing Webhook Callback URL (Optional)
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://webhook.site/destination or notification bridge"
-                  value={config.outgoingCallbackUrl}
-                  onChange={(e) => setConfig({ ...config, outgoingCallbackUrl: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-slate-800"
-                />
-              </div>
+            <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p className="text-xs font-semibold text-slate-700">Environment-managed endpoints</p>
+              <p className="text-[11px] text-slate-500">
+                Webhook URL, secret, and outgoing callback are read from server env only.
+                The admin UI can toggle mock vs webhook mode.
+              </p>
+              <p className="text-[11px] font-mono text-slate-600">
+                Ingestion webhook: {config.webhookUrl ? 'configured' : 'not set'}
+              </p>
+              <p className="text-[11px] font-mono text-slate-600">
+                Outgoing callback: {config.outgoingCallbackUrl ? 'configured' : 'not set'}
+              </p>
             </div>
 
             {/* Footer Buttons */}

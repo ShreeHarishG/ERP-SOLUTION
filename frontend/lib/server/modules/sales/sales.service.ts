@@ -1,36 +1,84 @@
 import prisma from '@/lib/server/db';
-import { createAuditLog } from '@/lib/server/utils/auditLog';
+import { createAuditLog, createAuditLogs } from '@/lib/server/utils/auditLog';
 import { generateSalesOrderNumber } from '@/lib/server/utils/order-number';
 import { bomsService } from '../boms/boms.service';
-import type { UserRole } from '@prisma/client';
+import { deduct, HEAVY_TX, lockProducts, lockSalesOrder, release, reserve } from '../inventory/stock-ledger';
+import { Prisma, type UserRole } from '@prisma/client';
 import type { CreateSalesOrderInput } from './sales.validation';
 
-function freeQty(onHand: number, reserved: number): number {
-  return Math.max(0, onHand - reserved);
+const PRICE_OVERRIDE_ROLES: UserRole[] = ['admin', 'product_manager'];
+
+const ORDER_INCLUDE = {
+  items: {
+    include: {
+      product: { select: { id: true, sku: true, name: true, unitOfMeasure: true, salesPrice: true } },
+    },
+  },
+  creator: { select: { name: true } },
+  manufacturingOrders: {
+    include: {
+      product: { select: { id: true, sku: true, name: true } },
+      creator: { select: { name: true } },
+    },
+  },
+  purchaseOrders: {
+    include: {
+      items: { include: { product: { select: { id: true, sku: true, name: true } } } },
+      creator: { select: { name: true } },
+    },
+  },
+} as const;
+
+async function reservedForLine(
+  tx: Prisma.TransactionClient,
+  salesOrderId: string,
+  productId: string,
+): Promise<number> {
+  const rows = await tx.inventoryMovement.findMany({
+    where: { referenceSoId: salesOrderId, productId },
+    select: { movementType: true, quantity: true },
+  });
+
+  return rows.reduce((total, row) => {
+    const qty = Number(row.quantity);
+    if (row.movementType === 'stock_reservation') return total + qty;
+    if (
+      row.movementType === 'stock_release' ||
+      row.movementType === 'reservation_release' ||
+      row.movementType === 'sales_delivery'
+    ) {
+      return total - qty;
+    }
+    return total;
+  }, 0);
 }
+
+type ShortageRow = {
+  productId: string;
+  productName: string;
+  sku: string;
+  ordered: number;
+  available: number;
+  shortage: number;
+  reserved: number;
+  hasBom: boolean;
+  bomName?: string;
+  materialsNeeded: Array<{
+    componentId: string;
+    productName: string;
+    required: number;
+    available: number;
+    shortage: number;
+    unitOfMeasure: string;
+  }>;
+};
 
 export class SalesService {
   async list(limit = 50, skip = 0) {
     return prisma.salesOrder.findMany({
       take: limit,
       skip,
-      include: {
-        items: {
-          include: { product: true },
-        },
-        manufacturingOrders: {
-          include: {
-            product: true,
-            creator: { select: { name: true } },
-          },
-        },
-        purchaseOrders: {
-          include: {
-            items: { include: { product: true } },
-            creator: { select: { name: true } },
-          },
-        },
-      },
+      include: ORDER_INCLUDE,
       orderBy: { createdAt: 'desc' },
     });
   }
@@ -38,22 +86,7 @@ export class SalesService {
   async getById(id: string) {
     const order = await prisma.salesOrder.findUnique({
       where: { id },
-      include: {
-        items: { include: { product: true } },
-        creator: { select: { name: true } },
-        manufacturingOrders: {
-          include: {
-            product: true,
-            creator: { select: { name: true } },
-          },
-        },
-        purchaseOrders: {
-          include: {
-            items: { include: { product: true } },
-            creator: { select: { name: true } },
-          },
-        },
-      },
+      include: ORDER_INCLUDE,
     });
 
     if (!order) {
@@ -69,15 +102,61 @@ export class SalesService {
     actorName: string,
     actorRole: UserRole,
   ) {
-    const totalAmount = dto.items.reduce(
-      (sum, item) => sum + item.quantityOrdered * item.unitPrice,
-      0,
+    const productIds = [...new Set(dto.items.map((item) => item.productId))];
+    const products = await prisma.product.findMany({
+      where: { id: { in: productIds } },
+      select: { id: true, name: true, sku: true, isActive: true, salesPrice: true },
+    });
+
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    const missing = productIds.filter((id) => !productMap.has(id));
+    if (missing.length > 0) {
+      throw Object.assign(new Error('One or more products do not exist'), { statusCode: 400 });
+    }
+
+    const inactive = products.filter((product) => !product.isActive);
+    if (inactive.length > 0) {
+      throw Object.assign(
+        new Error(`Inactive products cannot be sold: ${inactive.map((p) => p.sku).join(', ')}`),
+        { statusCode: 400 },
+      );
+    }
+
+    const canOverridePrice = PRICE_OVERRIDE_ROLES.includes(actorRole);
+    const priceOverrides: Array<{ sku: string; requested: number; catalog: number }> = [];
+
+    const lineItems = dto.items.map((item) => {
+      const product = productMap.get(item.productId)!;
+      const catalogPrice = new Prisma.Decimal(product.salesPrice);
+      let unitPrice = catalogPrice;
+
+      if (item.unitPrice !== undefined && canOverridePrice) {
+        unitPrice = new Prisma.Decimal(item.unitPrice);
+        if (!unitPrice.equals(catalogPrice)) {
+          priceOverrides.push({
+            sku: product.sku,
+            requested: Number(item.unitPrice),
+            catalog: Number(catalogPrice),
+          });
+        }
+      }
+
+      return {
+        productId: item.productId,
+        quantityOrdered: item.quantityOrdered,
+        unitPrice,
+      };
+    });
+
+    const totalAmount = lineItems.reduce(
+      (sum, item) => sum.add(item.unitPrice.mul(item.quantityOrdered)),
+      new Prisma.Decimal(0),
     );
 
-    const order = await prisma.$transaction(async (tx) => {
+    const fullOrder = await prisma.$transaction(async (tx) => {
       const orderNumber = await generateSalesOrderNumber(tx);
 
-      const createdOrder = await tx.salesOrder.create({
+      return tx.salesOrder.create({
         data: {
           orderNumber,
           customerName: dto.customerName,
@@ -87,26 +166,11 @@ export class SalesService {
           totalAmount,
           status: 'draft',
           createdBy: actorId,
+          items: { create: lineItems },
         },
+        include: ORDER_INCLUDE,
       });
-
-      await Promise.all(
-        dto.items.map((item) =>
-          tx.salesOrderItem.create({
-            data: {
-              salesOrderId: createdOrder.id,
-              productId: item.productId,
-              quantityOrdered: item.quantityOrdered,
-              unitPrice: item.unitPrice,
-            },
-          }),
-        ),
-      );
-
-      return createdOrder;
-    });
-
-    const fullOrder = await this.getById(order.id);
+    }, HEAVY_TX);
 
     await createAuditLog({
       userId: actorId,
@@ -114,9 +178,13 @@ export class SalesService {
       userRole: actorRole,
       action: 'sales_order_created',
       entityType: 'sales_order',
-      entityId: order.id,
-      entityName: order.orderNumber,
-      newValues: JSON.parse(JSON.stringify(fullOrder)),
+      entityId: fullOrder.id,
+      entityName: fullOrder.orderNumber,
+      newValues: {
+        totalAmount: Number(totalAmount),
+        itemCount: lineItems.length,
+        priceOverrides: priceOverrides.length > 0 ? priceOverrides : undefined,
+      },
     });
 
     return fullOrder;
@@ -128,148 +196,129 @@ export class SalesService {
     actorName: string,
     actorRole: UserRole,
   ) {
-    const order = await prisma.salesOrder.findUnique({
-      where: { id },
-      include: {
-        items: { include: { product: true } },
-      },
-    });
-
-    if (!order) {
-      throw Object.assign(new Error('Sales Order not found'), { statusCode: 404 });
-    }
-
-    if (!['draft', 'shortage_detected'].includes(order.status)) {
-      throw Object.assign(
-        new Error('Only draft or shortage-detected orders can be confirmed'),
-        { statusCode: 400 },
-      );
-    }
-
-    const shortagesList: Array<{
-      productId: string;
-      productName: string;
-      sku: string;
-      ordered: number;
-      available: number;
-      shortage: number;
-      reserved: number;
-      hasBom: boolean;
-      bomName?: string;
-      materialsNeeded: Array<{
-        componentId: string;
-        productName: string;
-        required: number;
-        available: number;
-        shortage: number;
-        unitOfMeasure: string;
-      }>;
-    }> = [];
-
-    let allFullyReserved = true;
-
-    for (const item of order.items) {
-      const onHand = Number(item.product.onHandQuantity);
-      const reserved = Number(item.product.reservedQuantity);
-      const free = freeQty(onHand, reserved);
-      const ordered = Number(item.quantityOrdered);
-
-      if (free < ordered) {
-        allFullyReserved = false;
-        const shortage = ordered - free;
-        const bomExplosion = await bomsService.explode(item.productId, shortage);
-
-        if (bomExplosion.hasBom) {
-          await createAuditLog({
-            userId: actorId,
-            userName: actorName,
-            userRole: actorRole,
-            action: 'bom_exploded',
-            entityType: 'bom',
-            entityId: item.productId,
-            entityName: bomExplosion.bomName,
-            newValues: {
-              salesOrderId: order.id,
-              orderNumber: order.orderNumber,
-              shortageQty: shortage,
-              materials: bomExplosion.materials,
-            },
-          });
-        }
-
-        shortagesList.push({
-          productId: item.productId,
-          productName: item.product.name,
-          sku: item.product.sku,
-          ordered,
-          available: free,
-          shortage,
-          reserved: free,
-          hasBom: bomExplosion.hasBom,
-          bomName: bomExplosion.bomName,
-          materialsNeeded: bomExplosion.materials.map((m) => ({
-            componentId: m.componentId,
-            productName: m.product,
-            required: m.required,
-            available: m.available,
-            shortage: m.shortage,
-            unitOfMeasure: m.unitOfMeasure,
-          })),
-        });
-      }
-    }
-
     const updatedOrder = await prisma.$transaction(async (tx) => {
-      for (const item of order.items) {
-        const product = await tx.product.findUnique({ where: { id: item.productId } });
-        if (!product) continue;
+      const locked = await lockSalesOrder(tx, id);
+      if (!locked) {
+        throw Object.assign(new Error('Sales Order not found'), { statusCode: 404 });
+      }
 
-        const onHand = Number(product.onHandQuantity);
-        const reserved = Number(product.reservedQuantity);
-        const free = freeQty(onHand, reserved);
+      if (!['draft', 'shortage_detected'].includes(locked.status)) {
+        throw Object.assign(
+          new Error('Only draft or shortage-detected orders can be confirmed'),
+          { statusCode: 400 },
+        );
+      }
+
+      const items = await tx.salesOrderItem.findMany({
+        where: { salesOrderId: id },
+        include: { product: true },
+      });
+
+      await lockProducts(
+        tx,
+        items.map((item) => item.productId),
+      );
+
+      const shortagesList: ShortageRow[] = [];
+      let allFullyReserved = true;
+      const movements: Prisma.InventoryMovementCreateManyInput[] = [];
+      const audits: Parameters<typeof createAuditLogs>[0] = [];
+
+      for (const item of items) {
         const ordered = Number(item.quantityOrdered);
-        const toReserve = Math.min(ordered, free);
+        const alreadyReserved = await reservedForLine(tx, id, item.productId);
+        const remaining = Math.max(0, ordered - alreadyReserved);
+        if (remaining <= 0) continue;
+
+        const fresh = await tx.product.findUnique({ where: { id: item.productId } });
+        if (!fresh) continue;
+
+        const free = Math.max(0, Number(fresh.onHandQuantity) - Number(fresh.reservedQuantity));
+        const toReserve = Math.min(remaining, free);
 
         if (toReserve > 0) {
-          const newReserved = reserved + toReserve;
+          const mutation = await reserve(tx, item.productId, toReserve);
 
-          await tx.product.update({
-            where: { id: item.productId },
-            data: { reservedQuantity: newReserved },
+          movements.push({
+            productId: item.productId,
+            movementType: 'stock_reservation',
+            quantity: toReserve,
+            direction: -1,
+            quantityBefore: mutation.onHandBefore,
+            quantityAfter: mutation.onHandAfter,
+            reservedBefore: mutation.reservedBefore,
+            reservedAfter: mutation.reservedAfter,
+            referenceSoId: locked.id,
+            notes: `Reserved ${toReserve} for Sales Order ${locked.orderNumber}`,
+            createdBy: actorId,
           });
 
-          await tx.inventoryMovement.create({
-            data: {
-              productId: item.productId,
-              movementType: 'stock_reservation',
-              quantity: toReserve,
-              direction: -1,
-              quantityBefore: onHand,
-              quantityAfter: onHand,
-              reservedBefore: reserved,
-              reservedAfter: newReserved,
-              referenceSoId: order.id,
-              notes: `Reserved ${toReserve} for Sales Order ${order.orderNumber}`,
-              createdBy: actorId,
-            },
-          });
-
-          await createAuditLog({
+          audits.push({
             userId: actorId,
             userName: actorName,
             userRole: actorRole,
             action: 'stock_reserved',
             entityType: 'product',
             entityId: item.productId,
-            entityName: product.name,
+            entityName: fresh.name,
             newValues: {
-              salesOrderId: order.id,
-              orderNumber: order.orderNumber,
+              salesOrderId: locked.id,
+              orderNumber: locked.orderNumber,
               quantityReserved: toReserve,
             },
           });
         }
+
+        const reservedNow = alreadyReserved + toReserve;
+        if (reservedNow < ordered) {
+          allFullyReserved = false;
+          const shortage = ordered - reservedNow;
+          const bomExplosion = await bomsService.explode(item.productId, shortage);
+
+          if (bomExplosion.hasBom) {
+            audits.push({
+              userId: actorId,
+              userName: actorName,
+              userRole: actorRole,
+              action: 'bom_exploded',
+              entityType: 'bom',
+              entityId: item.productId,
+              entityName: bomExplosion.bomName,
+              newValues: {
+                salesOrderId: locked.id,
+                orderNumber: locked.orderNumber,
+                shortageQty: shortage,
+                materials: bomExplosion.materials,
+              },
+            });
+          }
+
+          shortagesList.push({
+            productId: item.productId,
+            productName: fresh.name,
+            sku: fresh.sku,
+            ordered,
+            available: free,
+            shortage,
+            reserved: reservedNow,
+            hasBom: bomExplosion.hasBom,
+            bomName: bomExplosion.bomName,
+            materialsNeeded: bomExplosion.materials.map((m) => ({
+              componentId: m.componentId,
+              productName: m.product,
+              required: m.required,
+              available: m.available,
+              shortage: m.shortage,
+              unitOfMeasure: m.unitOfMeasure,
+            })),
+          });
+        }
       }
+
+      if (movements.length > 0) {
+        await tx.inventoryMovement.createMany({ data: movements });
+      }
+      await createAuditLogs(audits, tx);
 
       if (allFullyReserved) {
         return tx.salesOrder.update({
@@ -279,21 +328,20 @@ export class SalesService {
             confirmedBy: actorId,
             confirmedAt: new Date(),
           },
-          include: { items: { include: { product: true } } },
+          include: ORDER_INCLUDE,
         });
       }
 
       const analysisReport = {
-        salesOrderId: order.orderNumber,
+        salesOrderId: locked.orderNumber,
         checkedAt: new Date().toISOString(),
         shortages: shortagesList,
       };
-
-      const originalNotes = (order.notes || '').split('\n\n[Shortage Analysis]\n')[0];
+      const originalNotes = (locked.notes || '').split('\n\n[Shortage Analysis]\n')[0];
       const newNotes =
         originalNotes + '\n\n[Shortage Analysis]\n' + JSON.stringify(analysisReport, null, 2);
 
-      return tx.salesOrder.update({
+      const shortageOrder = await tx.salesOrder.update({
         where: { id },
         data: {
           status: 'shortage_detected',
@@ -301,9 +349,25 @@ export class SalesService {
           confirmedAt: new Date(),
           notes: newNotes,
         },
-        include: { items: { include: { product: true } } },
+        include: ORDER_INCLUDE,
       });
-    });
+
+      await createAuditLog(
+        {
+          userId: actorId,
+          userName: actorName,
+          userRole: actorRole,
+          action: 'shortage_detected',
+          entityType: 'sales_order',
+          entityId: id,
+          entityName: locked.orderNumber,
+          newValues: { shortages: shortagesList },
+        },
+        tx,
+      );
+
+      return shortageOrder;
+    }, HEAVY_TX);
 
     await createAuditLog({
       userId: actorId,
@@ -312,24 +376,9 @@ export class SalesService {
       action: 'sales_order_confirmed',
       entityType: 'sales_order',
       entityId: id,
-      entityName: order.orderNumber,
-      newValues: {
-        status: allFullyReserved ? 'ready' : 'shortage_detected',
-      },
+      entityName: updatedOrder.orderNumber,
+      newValues: { status: updatedOrder.status },
     });
-
-    if (!allFullyReserved) {
-      await createAuditLog({
-        userId: actorId,
-        userName: actorName,
-        userRole: actorRole,
-        action: 'shortage_detected',
-        entityType: 'sales_order',
-        entityId: id,
-        entityName: order.orderNumber,
-        newValues: { shortages: shortagesList },
-      });
-    }
 
     return updatedOrder;
   }
@@ -340,63 +389,56 @@ export class SalesService {
     actorName: string,
     actorRole: UserRole,
   ) {
-    const order = await prisma.salesOrder.findUnique({
-      where: { id },
-      include: { items: { include: { product: true } } },
-    });
-
-    if (!order) {
-      throw Object.assign(new Error('Sales Order not found'), { statusCode: 404 });
-    }
-
-    if (order.status !== 'ready') {
-      throw Object.assign(new Error('Only orders in READY state can be delivered'), {
-        statusCode: 400,
-      });
-    }
-
     const updatedOrder = await prisma.$transaction(async (tx) => {
-      for (const item of order.items) {
+      const locked = await lockSalesOrder(tx, id);
+      if (!locked) {
+        throw Object.assign(new Error('Sales Order not found'), { statusCode: 404 });
+      }
+
+      if (locked.status !== 'ready') {
+        throw Object.assign(new Error('Only orders in READY state can be delivered'), {
+          statusCode: 400,
+        });
+      }
+
+      const items = await tx.salesOrderItem.findMany({
+        where: { salesOrderId: id },
+        include: { product: true },
+      });
+
+      await lockProducts(
+        tx,
+        items.map((item) => item.productId),
+      );
+
+      const movements: Prisma.InventoryMovementCreateManyInput[] = [];
+
+      for (const item of items) {
         const ordered = Number(item.quantityOrdered);
-        const product = await tx.product.findUnique({ where: { id: item.productId } });
-        const onHand = Number(product?.onHandQuantity || 0);
-        const reserved = Number(product?.reservedQuantity || 0);
+        const mutation = await deduct(tx, item.productId, ordered);
 
-        if (onHand < ordered) {
-          throw Object.assign(
-            new Error(
-              `Insufficient physical stock to deliver ${item.product.name}. Required: ${ordered}, On hand: ${onHand}`,
-            ),
-            { statusCode: 400 },
-          );
-        }
-
-        const newOnHand = onHand - ordered;
-        const newReserved = Math.max(0, reserved - ordered);
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            onHandQuantity: newOnHand,
-            reservedQuantity: newReserved,
-          },
+        await tx.salesOrderItem.update({
+          where: { id: item.id },
+          data: { quantityDelivered: ordered },
         });
 
-        await tx.inventoryMovement.create({
-          data: {
-            productId: item.productId,
-            movementType: 'sales_delivery',
-            quantity: ordered,
-            direction: -1,
-            quantityBefore: onHand,
-            quantityAfter: newOnHand,
-            reservedBefore: reserved,
-            reservedAfter: newReserved,
-            referenceSoId: order.id,
-            notes: `Delivery for Sales Order ${order.orderNumber}`,
-            createdBy: actorId,
-          },
+        movements.push({
+          productId: item.productId,
+          movementType: 'sales_delivery',
+          quantity: ordered,
+          direction: -1,
+          quantityBefore: mutation.onHandBefore,
+          quantityAfter: mutation.onHandAfter,
+          reservedBefore: mutation.reservedBefore,
+          reservedAfter: mutation.reservedAfter,
+          referenceSoId: locked.id,
+          notes: `Delivery for Sales Order ${locked.orderNumber}`,
+          createdBy: actorId,
         });
+      }
+
+      if (movements.length > 0) {
+        await tx.inventoryMovement.createMany({ data: movements });
       }
 
       return tx.salesOrder.update({
@@ -406,9 +448,9 @@ export class SalesService {
           deliveredBy: actorId,
           deliveredAt: new Date(),
         },
-        include: { items: { include: { product: true } } },
+        include: ORDER_INCLUDE,
       });
-    });
+    }, HEAVY_TX);
 
     await createAuditLog({
       userId: actorId,
@@ -417,7 +459,7 @@ export class SalesService {
       action: 'sales_order_delivered',
       entityType: 'sales_order',
       entityId: id,
-      entityName: order.orderNumber,
+      entityName: updatedOrder.orderNumber,
       newValues: { status: 'delivered' },
     });
 
@@ -430,65 +472,62 @@ export class SalesService {
     actorName: string,
     actorRole: UserRole,
   ) {
-    const order = await prisma.salesOrder.findUnique({
-      where: { id },
-      include: { items: { include: { product: true } } },
-    });
-
-    if (!order) {
-      throw Object.assign(new Error('Sales Order not found'), { statusCode: 404 });
-    }
-
-    if (['delivered', 'cancelled'].includes(order.status)) {
-      throw Object.assign(new Error('Cannot cancel a delivered or already cancelled order'), {
-        statusCode: 400,
-      });
-    }
-
     const updatedOrder = await prisma.$transaction(async (tx) => {
-      if (order.status === 'ready' || order.status === 'shortage_detected') {
-        for (const item of order.items) {
-          const product = await tx.product.findUnique({ where: { id: item.productId } });
-          if (!product) continue;
+      const locked = await lockSalesOrder(tx, id);
+      if (!locked) {
+        throw Object.assign(new Error('Sales Order not found'), { statusCode: 404 });
+      }
 
-          const reserved = Number(product.reservedQuantity);
-          const ordered = Number(item.quantityOrdered);
-          const onHand = Number(product.onHandQuantity);
-          const toRelease = Math.min(ordered, reserved);
+      if (['delivered', 'cancelled'].includes(locked.status)) {
+        throw Object.assign(new Error('Cannot cancel a delivered or already cancelled order'), {
+          statusCode: 400,
+        });
+      }
 
-          if (toRelease > 0) {
-            const newReserved = reserved - toRelease;
+      const items = await tx.salesOrderItem.findMany({
+        where: { salesOrderId: id },
+      });
 
-            await tx.product.update({
-              where: { id: item.productId },
-              data: { reservedQuantity: newReserved },
-            });
+      if (locked.status === 'ready' || locked.status === 'shortage_detected') {
+        await lockProducts(
+          tx,
+          items.map((item) => item.productId),
+        );
 
-            await tx.inventoryMovement.create({
-              data: {
-                productId: item.productId,
-                movementType: 'stock_release',
-                quantity: toRelease,
-                direction: 1,
-                quantityBefore: onHand,
-                quantityAfter: onHand,
-                reservedBefore: reserved,
-                reservedAfter: newReserved,
-                referenceSoId: order.id,
-                notes: `Released reservation for cancelled order ${order.orderNumber}`,
-                createdBy: actorId,
-              },
-            });
-          }
+        const movements: Prisma.InventoryMovementCreateManyInput[] = [];
+
+        for (const item of items) {
+          const toRelease = await reservedForLine(tx, id, item.productId);
+          if (toRelease <= 0) continue;
+
+          const mutation = await release(tx, item.productId, toRelease);
+
+          movements.push({
+            productId: item.productId,
+            movementType: 'stock_release',
+            quantity: toRelease,
+            direction: 1,
+            quantityBefore: mutation.onHandBefore,
+            quantityAfter: mutation.onHandAfter,
+            reservedBefore: mutation.reservedBefore,
+            reservedAfter: mutation.reservedAfter,
+            referenceSoId: locked.id,
+            notes: `Released reservation for cancelled order ${locked.orderNumber}`,
+            createdBy: actorId,
+          });
+        }
+
+        if (movements.length > 0) {
+          await tx.inventoryMovement.createMany({ data: movements });
         }
       }
 
       return tx.salesOrder.update({
         where: { id },
         data: { status: 'cancelled' },
-        include: { items: { include: { product: true } } },
+        include: ORDER_INCLUDE,
       });
-    });
+    }, HEAVY_TX);
 
     await createAuditLog({
       userId: actorId,
@@ -497,7 +536,7 @@ export class SalesService {
       action: 'sales_order_cancelled',
       entityType: 'sales_order',
       entityId: id,
-      entityName: order.orderNumber,
+      entityName: updatedOrder.orderNumber,
       newValues: { status: 'cancelled' },
     });
 

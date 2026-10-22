@@ -10,7 +10,7 @@ import { useEffect } from 'react';
 const userSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
   email: z.string().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters').optional().or(z.literal('')),
+  password: z.string().min(10, 'Password must be at least 10 characters').optional().or(z.literal('')),
   role: z.enum(['admin', 'product_manager', 'sales', 'purchase', 'inventory']),
   isActive: z.boolean(),
 }).refine((data) => {

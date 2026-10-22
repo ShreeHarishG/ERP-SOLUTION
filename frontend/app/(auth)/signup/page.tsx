@@ -16,7 +16,7 @@ const signupSchema = z.object({
   language: z.string().min(1, 'Language is required'),
   companySize: z.string().min(1, 'Company size is required'),
   primaryInterest: z.string().min(1, 'Primary Interest is required'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  password: z.string().min(10, 'Password must be at least 10 characters'),
 });
 
 type SignupFormData = z.infer<typeof signupSchema>;

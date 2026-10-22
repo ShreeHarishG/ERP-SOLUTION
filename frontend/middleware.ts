@@ -22,6 +22,15 @@ function decodeJwtPayload(token: string): any | null {
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // 0. Static assets & public media files: bypass middleware immediately
+  if (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/api') ||
+    /\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|woff|woff2|ttf)$/.test(pathname)
+  ) {
+    return NextResponse.next();
+  }
+
   const accessToken = request.cookies.get('access_token')?.value;
   const refreshToken = request.cookies.get('refresh_token')?.value;
 

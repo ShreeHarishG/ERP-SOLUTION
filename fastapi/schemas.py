@@ -1,4 +1,4 @@
-from typing import TypedDict, Any
+from typing import TypedDict, Any, Optional
 from pydantic import BaseModel
 
 class ERPState(TypedDict, total=False):
@@ -11,12 +11,12 @@ class ERPState(TypedDict, total=False):
 
 class ChatRequest(BaseModel):
     question: str
-    role: str
+    role: Optional[str] = None
 
 class ChatResponse(BaseModel):
     answer: str
 
 class InsightsRequest(BaseModel):
-    role: str
+    role: Optional[str] = None
     context: dict
 

@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const createSalesOrderItemSchema = z.object({
   productId: z.string().uuid('Product ID must be a valid UUID'),
   quantityOrdered: z.number().positive('Quantity must be greater than 0'),
-  unitPrice: z.number().nonnegative('Unit price cannot be negative'),
+  unitPrice: z.number().nonnegative('Unit price cannot be negative').optional(),
 });
 
 export const createSalesOrderSchema = z.object({

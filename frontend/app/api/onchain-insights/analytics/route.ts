@@ -9,6 +9,7 @@ import {
   getOutcomeAnalyticsData,
   addPostMortemRecord,
 } from '@/lib/mock-data/onchain-insights/analytics';
+import { requireRole, isErrorResponse } from '@/lib/server/auth';
 import type {
   OutcomeAnalyticsFilterParams,
   PostMortemSubmissionPayload,
@@ -17,6 +18,9 @@ import type {
 } from '@/types/onchain-insights';
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireRole('admin', 'purchase', 'product_manager');
+  if (isErrorResponse(authResult)) return authResult;
+
   try {
     const { searchParams } = new URL(request.url);
 
@@ -42,6 +46,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireRole('admin', 'purchase');
+  if (isErrorResponse(authResult)) return authResult;
+
   try {
     const body = (await request.json()) as PostMortemSubmissionPayload;
 
