@@ -415,7 +415,7 @@ export function getMockDashboardData(filters: OnchainDashboardFilters): OnchainD
     affectedMaterials: MOCK_AFFECTED_MATERIALS,
     recommendedActions: MOCK_RECOMMENDED_ACTIONS,
     suppliers: suppliers,
-    dataMode: 'mock',
+    dataMode: process.env.NEXT_PUBLIC_ONCHAIN_DATA_MODE === 'mock' ? 'mock' : 'api',
     lastUpdated: new Date().toISOString(),
   };
 }

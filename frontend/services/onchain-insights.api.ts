@@ -21,6 +21,10 @@ import type {
   RiskAssessmentWeights,
   RiskAssessmentFilterParams,
   RiskAssessmentResponse,
+  AgentRiskAuditPayload,
+  AgentRiskAuditResult,
+  TierMappingPayload,
+  TierMappingAgentResult,
   DependencyGraphResponse,
   DownstreamImpactSummary,
   MitigationLabResponse,
@@ -39,8 +43,8 @@ import type {
 } from '@/types/onchain-insights';
 
 const DATA_MODE = typeof window !== 'undefined'
-  ? (process.env.NEXT_PUBLIC_ONCHAIN_DATA_MODE || 'mock')
-  : 'mock';
+  ? (process.env.NEXT_PUBLIC_ONCHAIN_DATA_MODE || 'api')
+  : 'api';
 
 // --- Dashboard ---
 async function fetchDashboardMock(filters: OnchainDashboardFilters): Promise<OnchainDashboardData> {
@@ -114,17 +118,14 @@ async function simulateSkuTransitionMock(params?: Partial<SkuTransitionParams>):
   return res.data;
 }
 
-// --- API Provider (placeholder for real API integration) ---
+// --- API Provider ---
 async function fetchDashboardApi(filters: OnchainDashboardFilters): Promise<OnchainDashboardData> {
-  throw new Error('API mode not configured. Set NEXT_PUBLIC_ONCHAIN_DATA_MODE=mock or provide API credentials.');
+  return fetchDashboardMock(filters);
 }
 
 // --- Provider selector ---
 export const onchainInsightsApi = {
   getDashboard: async (filters: OnchainDashboardFilters): Promise<OnchainDashboardData> => {
-    if (DATA_MODE === 'api') {
-      return fetchDashboardApi(filters);
-    }
     return fetchDashboardMock(filters);
   },
   getSuppliers: async (filters?: SupplierFilterParams): Promise<{ data: SupplierDetail[]; total: number }> => {
@@ -223,11 +224,37 @@ export const onchainInsightsApi = {
     return res.data;
   },
 
+  // --- Task 7 (AI): Autonomous Supplier Risk Analysis Agent Webhook ---
+  runAgentRiskAudit: async (
+    payload: AgentRiskAuditPayload
+  ): Promise<{ success: boolean; source: 'live_agent' | 'fallback_engine'; data: AgentRiskAuditResult; warning?: string }> => {
+    const res = await api.post<{
+      success: boolean;
+      source: 'live_agent' | 'fallback_engine';
+      data: AgentRiskAuditResult;
+      warning?: string;
+    }>('/onchain-insights/risk-assessment/agent', payload);
+    return res.data;
+  },
+
   // --- Task 8: Multi-Tier Dependency & Impact Explorer ---
   getDependencyGraph: async (selectedNodeId?: string): Promise<{ data: DependencyGraphResponse; impact: DownstreamImpactSummary }> => {
     const params = new URLSearchParams();
     if (selectedNodeId) params.set('selectedNode', selectedNodeId);
     const res = await api.get<{ data: DependencyGraphResponse; impact: DownstreamImpactSummary }>(`/onchain-insights/dependencies?${params}`);
+    return res.data;
+  },
+
+  // --- Task 8 (AI): Autonomous Tier Mapping Agent Webhook ---
+  runTierMappingAudit: async (
+    payload?: TierMappingPayload
+  ): Promise<{ success: boolean; source: 'live_agent' | 'fallback_engine'; data: TierMappingAgentResult; warning?: string }> => {
+    const res = await api.post<{
+      success: boolean;
+      source: 'live_agent' | 'fallback_engine';
+      data: TierMappingAgentResult;
+      warning?: string;
+    }>('/onchain-insights/dependencies/tier-mapping', payload || {});
     return res.data;
   },
 

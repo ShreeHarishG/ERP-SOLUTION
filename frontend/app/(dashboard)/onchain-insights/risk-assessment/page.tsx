@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import {
   ShieldAlert,
@@ -25,6 +25,8 @@ import {
   AlertOctagon,
   Scale,
   Award,
+  Bot,
+  Zap,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -48,10 +50,16 @@ import type {
   RiskAssessmentWeights,
   RiskAssessmentFilterParams,
   RiskTier,
+  AgentRiskAuditResult,
 } from '@/types/onchain-insights';
 
 export default function RiskAssessmentPage() {
-  const { useRiskAssessment } = useOnchainInsights();
+  const { useRiskAssessment, useAgentRiskAudit } = useOnchainInsights();
+  const agentMutation = useAgentRiskAudit();
+
+  // Autonomous Agent Audit State
+  const [agentAuditResults, setAgentAuditResults] = useState<Record<string, AgentRiskAuditResult>>({});
+  const [viewMode, setViewMode] = useState<'deterministic' | 'agent'>('agent');
 
   // Filters State
   const [filters, setFilters] = useState<RiskAssessmentFilterParams>({
@@ -97,6 +105,42 @@ export default function RiskAssessmentPage() {
   const selectedSupplier: SupplierRiskAssessment | undefined = useMemo(() => {
     return suppliersList.find(s => s.supplierId === selectedSupplierId) || suppliersList[0];
   }, [suppliersList, selectedSupplierId]);
+
+  // Active Agent Audit Record for currently selected supplier
+  const activeAgentData = selectedSupplier ? agentAuditResults[selectedSupplier.supplierId] : undefined;
+
+  // Run Autonomous AI Agent Audit
+  const handleRunAgentAudit = async () => {
+    if (!selectedSupplier) return;
+    try {
+      const res = await agentMutation.mutateAsync({
+        supplierId: selectedSupplier.supplierId,
+        supplierName: selectedSupplier.supplierName,
+        query: `Analyze risk vulnerabilities, capacity constraints and regional logistics for ${selectedSupplier.supplierName}`,
+      });
+      if (res.success && res.data) {
+        setAgentAuditResults(prev => ({
+          ...prev,
+          [selectedSupplier.supplierId]: res.data,
+        }));
+        setViewMode('agent');
+        if (res.source === 'live_agent') {
+          toast.success(`Autonomous Agent audit complete: ${res.data.overallScore}/100 (${res.data.riskTier.toUpperCase()})`);
+        } else {
+          toast('Deterministic fallback assessment served (agent offline).', { icon: 'ℹ️' });
+        }
+      }
+    } catch (err: any) {
+      toast.error('Failed to run agent risk audit: ' + (err?.message || 'Network error'));
+    }
+  };
+
+  // Auto-run Live AI Agent Audit on load/selection
+  useEffect(() => {
+    if (selectedSupplier && !agentAuditResults[selectedSupplier.supplierId] && !agentMutation.isPending) {
+      handleRunAgentAudit();
+    }
+  }, [selectedSupplierId]);
 
   // Reset Weights to System Baseline
   const handleResetWeights = () => {
@@ -171,10 +215,10 @@ export default function RiskAssessmentPage() {
               <h1 className="page-title text-2xl font-bold tracking-tight text-[#4B164C]">
                 Disruption Prediction & Explainable Risk Prioritization
               </h1>
-              {/* Mandatory Acceptance Criteria Badge */}
-              <Badge className="uppercase text-[10px] font-bold tracking-wider px-2.5 py-1 bg-purple-50 text-purple-700 border border-purple-200 flex items-center gap-1">
-                <Scale size={11} className="text-purple-600" />
-                Rule-Based Assessment (No Black-Box ML)
+              {/* Live Autonomous Agent Status Badge */}
+              <Badge className="uppercase text-[10px] font-bold tracking-wider px-2.5 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                <Bot size={11} className="text-emerald-600" />
+                Live AI Risk Agent Active (SNSHub Gateway)
               </Badge>
             </div>
             <p className="page-subtitle text-xs text-text-muted">
@@ -478,7 +522,7 @@ export default function RiskAssessmentPage() {
         {selectedSupplier && (
           <div className="lg:col-span-5 glass-card p-5 space-y-4">
             {/* Header Identity */}
-            <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-3">
               <div className="flex justify-between items-start">
                 <div className="space-y-0.5">
                   <span className="text-[10px] font-mono font-bold text-text-muted">
@@ -493,14 +537,89 @@ export default function RiskAssessmentPage() {
                 </div>
 
                 <div className="text-right space-y-1">
-                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${RISK_TIER_CONFIG[selectedSupplier.riskTier].bg} ${RISK_TIER_CONFIG[selectedSupplier.riskTier].color} border ${RISK_TIER_CONFIG[selectedSupplier.riskTier].border}`}>
-                    {selectedSupplier.riskTier} Risk
+                  <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+                    viewMode === 'agent' && activeAgentData
+                      ? `${RISK_TIER_CONFIG[activeAgentData.riskTier].bg} ${RISK_TIER_CONFIG[activeAgentData.riskTier].color} border ${RISK_TIER_CONFIG[activeAgentData.riskTier].border}`
+                      : `${RISK_TIER_CONFIG[selectedSupplier.riskTier].bg} ${RISK_TIER_CONFIG[selectedSupplier.riskTier].color} border ${RISK_TIER_CONFIG[selectedSupplier.riskTier].border}`
+                  }`}>
+                    {viewMode === 'agent' && activeAgentData ? activeAgentData.riskTier : selectedSupplier.riskTier} Risk
                   </span>
                   <p className="text-2xl font-black text-text-primary font-mono tracking-tight">
-                    {selectedSupplier.overallRiskScore}<span className="text-xs font-normal text-text-muted">/100</span>
+                    {viewMode === 'agent' && activeAgentData ? activeAgentData.overallScore : selectedSupplier.overallRiskScore}
+                    <span className="text-xs font-normal text-text-muted">/100</span>
                   </p>
                 </div>
               </div>
+
+              {/* Mode Toggle & AI Agent Trigger Bar */}
+              <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-1 p-0.5 bg-slate-200/70 rounded-xl text-[11px]">
+                  <button
+                    onClick={() => setViewMode('deterministic')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                      viewMode === 'deterministic'
+                        ? 'bg-white text-text-primary shadow-xs'
+                        : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    ⚖️ Deterministic
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!activeAgentData) {
+                        handleRunAgentAudit();
+                      } else {
+                        setViewMode('agent');
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-lg font-bold flex items-center gap-1.5 transition-all ${
+                      viewMode === 'agent'
+                        ? 'bg-[#4B164C] text-white shadow-xs'
+                        : 'text-text-muted hover:text-text-primary'
+                    }`}
+                  >
+                    <Bot size={12} /> AI Agent Synthesis
+                    {activeAgentData && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                    )}
+                  </button>
+                </div>
+
+                <button
+                  onClick={handleRunAgentAudit}
+                  disabled={agentMutation.isPending}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold bg-[#4B164C] text-white hover:bg-[#39103a] shadow-xs transition-all disabled:opacity-60"
+                  title="Query SNSHub AI Risk Agent Webhook"
+                >
+                  {agentMutation.isPending ? (
+                    <>
+                      <RefreshCw size={12} className="animate-spin" />
+                      <span>Auditing with Agent...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={12} className="text-amber-300" />
+                      <span>{activeAgentData ? 'Re-run Agent' : '⚡ Run AI Agent Audit'}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Verified Agent Badge when in Agent Mode */}
+              {viewMode === 'agent' && activeAgentData && (
+                <div className="p-2.5 rounded-lg bg-purple-50/80 border border-purple-200/80 text-[11px] flex items-center justify-between">
+                  <span className="text-purple-900 font-semibold flex items-center gap-1.5">
+                    <Sparkles size={12} className="text-purple-600" />
+                    {activeAgentData.confidenceLevel || 'AI Agent Verified (SNSHub)'}
+                    <Badge className="text-[9px] bg-emerald-100 text-emerald-800 border-emerald-300 py-0 px-1.5">
+                      {activeAgentData.source === 'live_agent' ? 'Live Webhook' : 'Fallback Engine'}
+                    </Badge>
+                  </span>
+                  <span className="text-[10px] text-purple-700 font-mono">
+                    {new Date(activeAgentData.lastAssessmentDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Radar Chart Factor Breakdown */}
@@ -543,22 +662,45 @@ export default function RiskAssessmentPage() {
             </div>
 
             {/* Plain-Language Explainable Narrative */}
-            <div className="p-4 rounded-xl bg-purple-50/50 border border-purple-100 space-y-2 text-xs">
-              <div className="flex items-center gap-1.5 text-[#4B164C] font-bold">
-                <Sparkles size={14} /> Explainable Root-Cause Narrative:
+            <div className={`p-4 rounded-xl border space-y-2 text-xs transition-all ${
+              viewMode === 'agent' && activeAgentData
+                ? 'bg-purple-100/40 border-purple-200'
+                : 'bg-purple-50/50 border-purple-100'
+            }`}>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[#4B164C] font-bold">
+                  {viewMode === 'agent' && activeAgentData ? <Bot size={14} /> : <Sparkles size={14} />}
+                  <span>
+                    {viewMode === 'agent' && activeAgentData
+                      ? 'AI Agent Narrative & Primary Risk Driver:'
+                      : 'Explainable Root-Cause Narrative:'}
+                  </span>
+                </div>
+                {viewMode === 'agent' && activeAgentData && (
+                  <Badge className="text-[9px] bg-purple-200/70 text-purple-900 border-purple-300">
+                    Driver: {activeAgentData.primaryRiskDriver}
+                  </Badge>
+                )}
               </div>
               <p className="text-text-secondary leading-relaxed">
-                {selectedSupplier.narrativeExplanation}
+                {viewMode === 'agent' && activeAgentData
+                  ? activeAgentData.narrativeExplanation
+                  : selectedSupplier.narrativeExplanation}
               </p>
             </div>
 
             {/* Contributing Root Causes */}
             <div className="space-y-1.5 text-xs">
               <p className="font-bold text-text-muted uppercase text-[10px]">
-                Identified Vulnerabilities & Evidence:
+                {viewMode === 'agent' && activeAgentData
+                  ? 'Agent-Identified Vulnerabilities & Operational Evidence:'
+                  : 'Identified Vulnerabilities & Evidence:'}
               </p>
               <ul className="space-y-1.5">
-                {selectedSupplier.contributingRootCauses.map((cause, i) => (
+                {(viewMode === 'agent' && activeAgentData
+                  ? activeAgentData.contributingRootCauses
+                  : selectedSupplier.contributingRootCauses
+                ).map((cause, i) => (
                   <li key={i} className="p-2 rounded-lg bg-slate-50 border border-slate-100 text-[11px] text-text-secondary flex items-start gap-1.5">
                     <span className="text-rose-500 font-bold mt-0.5">•</span>
                     <span>{cause}</span>
@@ -572,8 +714,10 @@ export default function RiskAssessmentPage() {
               <p className="font-bold text-emerald-800 flex items-center gap-1.5">
                 <CheckCircle2 size={13} className="text-emerald-600" /> Prescribed Mitigation:
               </p>
-              <p className="text-emerald-900 leading-relaxed text-[11px]">
-                {selectedSupplier.recommendedMitigation}
+              <p className="text-emerald-900 leading-relaxed text-[11px] whitespace-pre-line">
+                {viewMode === 'agent' && activeAgentData
+                  ? activeAgentData.recommendedMitigation
+                  : selectedSupplier.recommendedMitigation}
               </p>
             </div>
 

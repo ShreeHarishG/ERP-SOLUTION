@@ -51,11 +51,11 @@ export default function ControlTowerAgentsPage() {
   // Admin Stealth Configuration Modal
   const [showAdminConfig, setShowAdminConfig] = useState(false);
   const [config, setConfig] = useState<ControlTowerConfig>({
-    mode: 'mock',
-    webhookUrl: '',
+    mode: 'webhook',
+    webhookUrl: 'https://api.agents.snsihub.ai/webhook/56967650-dad6-4a36-814a-22134bbc62fe',
     webhookSecret: '',
     outgoingCallbackUrl: '',
-    simulateLatency: true,
+    simulateLatency: false,
   });
   const [pingResult, setPingResult] = useState<{
     status: string;
@@ -72,11 +72,11 @@ export default function ControlTowerAgentsPage() {
       .then((data) => {
         if (data) {
           setConfig({
-            mode: data.mode || 'mock',
-            webhookUrl: data.hasWebhook ? 'configured' : '',
+            mode: data.mode === 'mock' ? 'mock' : 'webhook',
+            webhookUrl: data.hasWebhook ? 'configured' : 'https://api.agents.snsihub.ai/webhook/56967650-dad6-4a36-814a-22134bbc62fe',
             webhookSecret: '',
             outgoingCallbackUrl: data.hasOutgoingCallback ? 'configured' : '',
-            simulateLatency: data.simulateLatency ?? true,
+            simulateLatency: false,
             lastHealthCheck: data.lastHealthCheck,
           });
         }
