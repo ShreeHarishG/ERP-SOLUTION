@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useOnchainInsights } from '@/hooks/useOnchainInsights';
 import { NOTIFICATION_CATEGORY_CONFIG } from '@/types/onchain-insights';
+import VoiceMicButton from '@/components/voice/VoiceMicButton';
 
 export default function Topbar({
   sidebarOpen,
@@ -160,6 +161,9 @@ export default function Topbar({
           <Plus size={14} />
           <span>New Product</span>
         </Link>
+
+        {/* Gnani Voice Intelligence Mic */}
+        <VoiceMicButton variant="pill" />
 
         {/* AI Insights */}
         <button

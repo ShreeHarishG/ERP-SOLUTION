@@ -17,6 +17,8 @@ import type {
   ShipmentFilterParams,
   RiskAssessmentFilterParams,
   RiskAssessmentWeights,
+  AgentRiskAuditPayload,
+  TierMappingPayload,
   MitigationLabWeights,
   ApprovalFilterParams,
   ApprovalActionPayload,
@@ -35,7 +37,9 @@ export const useOnchainInsights = () => {
       queryKey: ['onchainInsightsDashboard', filters],
       queryFn: () => onchainInsightsApi.getDashboard(filters),
       initialData: options?.initialData,
+      initialDataUpdatedAt: options?.initialData ? () => Date.now() : undefined,
       staleTime: CACHE_TIME,
+      retry: 1,
     });
   };
 
@@ -171,12 +175,26 @@ export const useOnchainInsights = () => {
     });
   };
 
+  // --- Task 7 (AI): Autonomous Supplier Risk Analysis Agent Hook ---
+  const useAgentRiskAudit = () => {
+    return useMutation({
+      mutationFn: (payload: AgentRiskAuditPayload) => onchainInsightsApi.runAgentRiskAudit(payload),
+    });
+  };
+
   // --- Task 8: Multi-Tier Dependency Graph Hook ---
   const useDependencyGraph = (selectedNodeId?: string) => {
     return useQuery({
       queryKey: ['onchainDependencyGraph', selectedNodeId],
       queryFn: () => onchainInsightsApi.getDependencyGraph(selectedNodeId),
       staleTime: CACHE_TIME,
+    });
+  };
+
+  // --- Task 8 (AI): Autonomous Tier Mapping Agent Hook ---
+  const useTierMappingAudit = () => {
+    return useMutation({
+      mutationFn: (payload?: TierMappingPayload) => onchainInsightsApi.runTierMappingAudit(payload),
     });
   };
 
@@ -291,7 +309,9 @@ export const useOnchainInsights = () => {
     useUpdateDisruptionStatus,
     useShipments,
     useRiskAssessment,
+    useAgentRiskAudit,
     useDependencyGraph,
+    useTierMappingAudit,
     useMitigationLab,
     useSubmitMitigationApproval,
     useApprovals,

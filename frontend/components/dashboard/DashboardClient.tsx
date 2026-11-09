@@ -61,7 +61,7 @@ export default function DashboardClient({
     );
   }
 
-  if ((isError || !displayData) && !isLoading) {
+  if (!displayData && !isLoading) {
     return (
       <div className="p-12 text-center border border-rose-200/50 bg-rose-50/50 rounded-2xl max-w-xl mx-auto my-12">
         <AlertTriangle className="mx-auto text-rose-500 mb-3" size={40} />

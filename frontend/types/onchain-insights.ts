@@ -646,6 +646,29 @@ export interface RiskAssessmentResponse {
   methodologyDisclosure: string;
 }
 
+export interface AgentRiskAuditPayload {
+  supplierId: string;
+  supplierName?: string;
+  query?: string;
+}
+
+export interface AgentRiskAuditResult {
+  id: string;
+  supplierId: string;
+  supplierName?: string;
+  overallScore: number;
+  riskTier: RiskTier;
+  factors: Record<string, any>;
+  primaryRiskDriver: string;
+  narrativeExplanation: string;
+  contributingRootCauses: string[];
+  recommendedMitigation: string;
+  lastAssessmentDate: string;
+  source: 'live_agent' | 'fallback_engine';
+  confidenceLevel?: string;
+}
+
+
 // =============================================================================
 // Task 8: Multi-Tier Dependency & Impact Explorer
 // =============================================================================
@@ -716,6 +739,46 @@ export interface DependencyGraphResponse {
     disruptedNodesCount: number;
     totalRevenueExposedINR: number;
   };
+}
+
+export interface TierMappingPayload {
+  scope?: string;
+  query?: string;
+  supplierId?: string;
+}
+
+export interface TierMappingAgentResult {
+  parseSuccess: boolean;
+  supplierComponentRelationships: Array<{
+    supplierId?: string;
+    supplierName?: string;
+    componentId?: string;
+    componentName?: string;
+    tierLevel?: number;
+  }>;
+  bomComponentRelationships: Array<{
+    bomId?: string;
+    productName?: string;
+    componentId?: string;
+    quantity?: number;
+  }>;
+  unmappedSuppliers: string[];
+  unmappedComponents: string[];
+  unmappedBoms: string[];
+  summary: {
+    suppliersAnalyzed: number;
+    componentsAnalyzed: number;
+    bomsAnalyzed: number;
+    supplierComponentRelationshipsFound: number;
+    bomComponentRelationshipsFound: number;
+  };
+  validation: {
+    valid: boolean;
+    invalidSupplierRelationships: any[];
+    invalidBomRelationships: any[];
+  };
+  source: 'live_agent' | 'fallback_engine';
+  lastMappedDate: string;
 }
 
 // =============================================================================

@@ -18,11 +18,11 @@ import { assertSafeHttpUrl } from '@/lib/server/utils/safe-url';
 
 // Runtime configuration singleton
 let towerConfig: ControlTowerConfig = {
-  mode: process.env.CONTROL_TOWER_MODE === 'webhook' ? 'webhook' : 'mock',
-  webhookUrl: process.env.CONTROL_TOWER_WEBHOOK_URL || '',
+  mode: process.env.CONTROL_TOWER_MODE === 'mock' ? 'mock' : 'webhook',
+  webhookUrl: process.env.CONTROL_TOWER_WEBHOOK_URL || 'https://api.agents.snsihub.ai/webhook/56967650-dad6-4a36-814a-22134bbc62fe',
   webhookSecret: process.env.CONTROL_TOWER_WEBHOOK_SECRET || '',
   outgoingCallbackUrl: process.env.CONTROL_TOWER_OUTGOING_WEBHOOK || '',
-  simulateLatency: true,
+  simulateLatency: false,
   lastHealthCheck: undefined,
 };
 
@@ -50,10 +50,12 @@ export class ControlTowerWebhookService {
       );
       if (rows && rows.length > 0 && (rows[0].value === 'mock' || rows[0].value === 'webhook')) {
         towerConfig.mode = rows[0].value;
+      } else {
+        towerConfig.mode = 'webhook';
       }
       isInitialized = true;
     } catch {
-      // Fall back to env-configured default if database is unavailable
+      towerConfig.mode = 'webhook';
     }
   }
 
