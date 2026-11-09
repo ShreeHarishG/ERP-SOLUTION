@@ -29,11 +29,14 @@ ChainIQ ERP introduces the concept of **active business routing**. Instead of wa
 
 ## System Architecture
 
-ChainIQ ERP uses a **decoupled transaction and intelligence architecture**. Crucial database mutations and ledger adjustments are processed in a highly secure, transaction-safe Next.js server environment. Meanwhile, operational intelligence analysis, NLP chat interactions, and predictive reorder calculations are offloaded to a FastAPI service running a LangGraph-state reasoning pipeline.
+ChainIQ ERP uses a **decoupled transaction, machine learning, and intelligence architecture**. Crucial database mutations and ledger adjustments are processed in a highly secure, transaction-safe Next.js server environment. Meanwhile, operational intelligence analysis, NLP chat interactions, and predictive disruption modeling are offloaded to a FastAPI service running a LangGraph-state reasoning pipeline and XGBoost + SHAP analytics. An integrated voice layer powered by Gnani AI brings hands-free speech interactions to shop floor personnel and operations managers.
 
 ```
 +-----------------------------------------------------------------------------------+
-|                               NEXT.JS WEB CLIENT
+|                               NEXT.JS WEB CLIENT                                  |
+|  - Modern Next.js 15 App Router with TanStack Query v5                            |
+|  - Interactive Voice Mic (16kHz PCM WAV Audio Capture via Web Audio API)          |
+|  - Voice Intelligence Command Tower (/onchain-insights/voice-intelligence)        |
 +────────────────────────────────────────┬──────────────────────────────────────────+
                                          │
                         (Secured JSON REST / Cookie Auth)
@@ -42,37 +45,43 @@ ChainIQ ERP uses a **decoupled transaction and intelligence architecture**. Cruc
 +-----------------------------------------------------------------------------------+
 |                              NEXT.JS ROUTE HANDLERS                               |
 |  - Location: /app/api/...                                                         |
-|  - RBAC API guards (requireRole)                                                  |
+|  - RBAC API guards (requireRole) & Demo Sandbox Resilient Fallbacks               |
 |  - Business Logic Services Layer (/lib/server/modules)                            |
+|  - Voice Gateway Proxies (/api/voice/query & /api/voice/risk-briefing)            |
 |  - ORM Layer: Prisma Client                                                       |
-+────────────────────────────────────────┬──────────────────────────────────────────+
-                                         │
-                         (ACID Transaction Commits & Reads)
-                                         │
-                                         ▼
-+-----------------------------------------------------------------------------------+
-|                        POSTGRESQL DATABASE (SUPABASE)                             |
-|  - 11 tables, custom database constraints, composite performance indices           |
-+────────────────────────────────────────▲──────────────────────────────────────────+
-                                         │
-                       (Direct SQLAlchemy Query Execution)
-                                         │
-                                         ▼
++──────────────────┬─────────────────────┬──────────────────────────────────────────+
+                   │                     │
+  (ACID Transactions)                    │ (Dual-Gateway Proxy or Cloud Fallback)
+                   │                     │
+                   ▼                     ▼
++──────────────────────────+   +────────────────────────────────────────────────────+
+|   POSTGRESQL DATABASE    |   |                GNANI AI SPEECH CLOUD               |
+|   (SUPABASE POOLER)      |   |  - Prisma STT: REST Audio Transcription            |
+|  - 11 core tables,       |   |  - Timbre TTS: High-Fidelity 24kHz Audio Synthesis |
+|    composite indices     |   +─────────────────────────▲──────────────────────────+
++──────────────────────────+                             │
+                   ▲                     (Speech APIs)   │
+                   │                                     │
+(Direct SQLAlchemy / Model Queries)                      │
+                   │                                     │
+                   ▼                                     ▼
 +-----------------------------------------------------------------------------------+
 |                            FASTAPI INTELLIGENCE ENGINE                            |
-|  - LangGraph Stateful Agent Workflow                                              |
-|  - LLM: Groq Llama-3.3-70b-versatile                                              |
-|  - Structured JSON Dashboard Insights Gateway                                     |
+|  - LangGraph Stateful Agent Workflow & Groq Llama-3.3-70b Inference               |
+|  - Onchain Insights: XGBoost Disruption Risk Predictor & SHAP Explainability       |
+|  - Gnani Speech Clients: gnaniStt (Prisma STT) & gnaniTts (Timbre TTS)            |
+|  - Voice Routes: POST /api/voice/query & POST /api/voice/risk-briefing            |
 +-----------------------------------------------------------------------------------+
 ```
 
 ### Core Architecture Flow
 
-1. **UI Layer**: React Server and Client Components render responsive dashboard panels. Client-side caching and mutations are managed by **TanStack Query**, reducing duplicate API calls.
-2. **Security & Session Layer**: Verification middleware validates stateless HTTP-only JWT cookies before requests reach API route handlers.
+1. **UI & Voice Layer**: React Server and Client Components render responsive dashboard panels. The browser records clean 16kHz mono WAV audio via Web Audio API, streaming directly to voice endpoints.
+2. **Security & Session Layer**: Verification middleware validates stateless HTTP-only JWT cookies before requests reach API route handlers, with resilient fallbacks for offline development.
 3. **Prisma ORM Layer**: Interacts with PostgreSQL using connection-pooled transaction pipelines. Multi-table inserts (e.g. Sales Order & Sales Order Items) are wrapped in atomic transactions.
-4. **FastAPI Agent Gateway**: The Next.js API layer compiles a live context JSON string representing KPIs, active runs, and shortages. It POSTs this context to FastAPI's `/api/insights` endpoint. This design eliminates direct database exposure by the AI engine, ensuring data security.
-5. **LangGraph Agent Workflow**: The FastAPI agent processes natural language user queries, selects authorized SQL tools, validates user permissions based on user role variables, and returns markdown-formatted answers.
+4. **Onchain Insights Subsystem**: An XGBoost machine learning model trained on multi-tier disruption telemetry outputs real-time failure probabilities and SHAP feature attributions for suppliers and shipments.
+5. **FastAPI Agent Gateway**: Offloads heavy AI orchestration and voice pipelines from the web tier. The `/api/insights` endpoint provides real-time operational summaries.
+6. **Gnani AI Voice Pipeline**: Audio uploads are transcribed via Gnani Prisma STT (`gnaniStt`), evaluated through the copilot or SHAP risk explainer, and synthesized into natural spoken WAV audio via Gnani Timbre TTS (`gnaniTts`).
 
 ---
 
@@ -81,13 +90,15 @@ ChainIQ ERP uses a **decoupled transaction and intelligence architecture**. Cruc
 | Technology                  | Layer                | Reason for Selection                                                                                                                                        |
 | :-------------------------- | :------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Next.js 15 (App Router)** | Client & Backend API | Provides server-side rendering (SSR) for fast initial loads, a unified App Router structure, and serverless API endpoints that secure database credentials. |
-| **FastAPI (Python 3.11)**   | Intelligence Engine  | Lightweight, highly performant async framework. Python is the industry standard for AI orchestration libraries like LangChain and LangGraph.                |
+| **FastAPI (Python 3.11)**   | Intelligence Engine  | Lightweight, highly performant async framework. Powers LangGraph agent reasoning and XGBoost predictive risk pipelines.                                     |
 | **Prisma ORM**              | Data Mapper          | Type-safe schema definitions, automated migrations, and an intuitive API for executing transactions.                                                        |
 | **PostgreSQL (Supabase)**   | Relational Storage   | Supports strict foreign key constraints, JSONB column types for flexible audit logs, and composite index optimization.                                      |
-| **TanStack Query v5**       | State Management     | Minimizes state synchronization code by handling API cache invalidation, loading states, error boundaries, and background updates.                          |
+| **TanStack Query v5**       | State Management     | Handles client cache invalidation, loading states, error boundaries, and instant background updates.                                                        |
+| **XGBoost & SHAP**          | Risk Prediction & ML | Powers the Onchain Insights engine, evaluating multi-tier supplier vulnerability and calculating exact feature-importance attributions.                   |
+| **Gnani AI (Prisma/Timbre)**| Voice Intelligence   | Enterprise Indian speech stack: Prisma STT for sub-second audio transcription and Timbre TTS (v3.0) for natural human-like voice synthesis.                |
 | **LangGraph / LangChain**   | AI Agent Routing     | Enables stateful multi-agent pipelines with role validation, tool selection, and LLM retry logic.                                                           |
-| **Groq (Llama-3.3-70b)**    | Large Language Model | Provides low-latency inference, ensuring the AI Assistant responds within sub-second thresholds.                                                            |
-| **Tailwind CSS**            | Styling System       | Speeds up UI layout construction using utility classes while remaining compatible with standard Vanilla CSS variables.                                      |
+| **Groq (Llama-3.3-70b)**    | Large Language Model | Ultra-low latency inference, generating conversational ERP answers and plain-spoken SHAP risk summaries.                                                    |
+| **Tailwind CSS**            | Styling System       | High-velocity responsive styling with glassmorphic cards and intuitive color-coded risk tier badges.                                                       |
 
 ---
 
@@ -178,6 +189,33 @@ ChainIQ ERP uses a **decoupled transaction and intelligence architecture**. Cruc
 - **Database Tables**: [`audit_logs`](file:///c:/ChainIQ-ERP/frontend/prisma/schema.prisma#L370-L392)
 - **APIs**: `GET /api/audit`
 - **Business Impact**: Prevents operator fraud and logs system state history.
+
+### 9. Supply Chain Intelligence (Onchain Insights)
+
+- **Purpose**: Predictive risk forecasting, supplier disruption oracles, and proactive supply chain defense.
+- **Responsibilities**: Evaluates multi-tier supplier reliability, monitors active logistics in transit, calculates composite risk indices using an XGBoost disruption classifier, and generates SHAP (SHapley Additive exPlanations) values explaining the exact contributing root causes behind high-risk alerts.
+- **Core Capabilities**:
+  - **Disruption Signals & Shipments**: Real-time oracle feeds detecting port congestions, geopolitical tensions, and logistics chokepoints.
+  - **Supplier Qualification & Audit**: Multi-dimensional scoring across financial health, quality compliance, on-time delivery rates, and ESG compliance.
+  - **Supplier Switching Simulator**: Side-by-side scenario simulator computing net margin impact, switching costs, and lead-time differentials when swapping critical vendors.
+  - **SKU Transition Planning**: Phased component phase-in/phase-out runway planning to prevent stranded scrap inventory.
+  - **Mitigation Scenario Lab**: Weight-adjustable risk simulations generating instant executive action plans.
+- **Target Users**: Super Admin, Procurement Manager, Product Manager.
+- **APIs**: `/api/onchain-insights/dashboard`, `/api/onchain-insights/suppliers`, `/api/onchain-insights/disruptions`, `/api/onchain-insights/supplier-switch`, `/api/onchain-insights/mitigation`
+- **Business Impact**: Prevents costly factory shutdowns by identifying vulnerable single-source dependencies weeks before an actual stockout occurs.
+
+### 10. Voice Intelligence Layer (Powered by Gnani AI)
+
+- **Purpose**: Hands-free voice interface bringing rapid conversational queries and spoken risk briefings to factory floor supervisors and busy executives.
+- **Responsibilities**: Accepts audio uploads directly from the browser's Web Audio API, leverages Gnani AI's **Prisma STT** (`https://api.vachana.ai/stt/v3`) for Indian-context sub-second transcription, routes queries to the core copilot or SHAP risk engine, and synthesizes answers into clean 24kHz WAV audio via Gnani AI's **Timbre TTS** (`https://api.vachana.ai/api/v1/tts/inference`).
+- **Core Flows**:
+  - **Flow 1 — Voice Q&A (Read-Only)**: The user clicks the mic and asks a business question (e.g., *"What is our revenue this month?"* or *"How many shipments are delayed?"*). The system transcribes the speech, queries the existing ERP copilot without touching internal business logic, synthesizes the answer, and plays it back with a standard HTML5 audio player. Zero robotic preambles or repeating the question.
+  - **Flow 2 — Spoken Risk Briefings**: Accepts voice questions regarding a supplier or shipment, queries Onchain Insights for current XGBoost/SHAP feature importance attributions, and prompts the LLM to translate those statistical coefficients into plain spoken English (e.g., *"Apex Hardware is flagged high risk primarily due to a 3-day port congestion at JNPT and an unpaid tier-2 supplier dispute."*).
+  - **Voice Intelligence Command Tower**: Dedicated showcase dashboard at `/onchain-insights/voice-intelligence` with real-time API latency badges, one-click prompt evaluations, active disruption audio broadcasts, and interactive factor contribution visualizers.
+- **Dual-Gateway Resilience**: Built with complete decoupled resilience. If the local FastAPI service is temporarily offline, the Next.js API routes seamlessly fallback to direct cloud synthesis, and the client UI maintains graceful offline telemetry fallback so user operations never freeze.
+- **Target Users**: Warehouse Supervisors, Plant Heads, Field Procurement Officers, Executives on the move.
+- **APIs**: `POST /api/voice/query`, `POST /api/voice/risk-briefing`, `POST /api/voice/synthesize`, `GET /api/voice/health`.
+- **Business Impact**: Cuts information retrieval time from minutes of dashboard clicking to a single 5-second spoken conversation.
 
 ---
 
@@ -393,6 +431,57 @@ frontend/
 - **Service Layer Pattern**: Database logic is isolated inside class files (e.g., [`SalesService`](file:///c:/ChainIQ-ERP/frontend/lib/server/modules/sales/sales.service.ts)), separating business rules from API route endpoints.
 - **Transactional Safety**: Prisma transactions protect write actions, rolling back mutations if an error occurs.
 - **API clients separation**: Next.js pages interact with APIs via dedicated services, keeping page code clean and testable.
+
+---
+
+## Local Setup & Quick Start
+
+### 1. Prerequisites
+- **Node.js** v18+ or v20+
+- **Python** 3.11+
+- **PostgreSQL / Supabase** credentials configured in `.env`
+
+### 2. Frontend Setup
+```bash
+cd frontend
+npm install
+npm run dev
+# Next.js ERP UI runs at: http://localhost:3000
+```
+
+### 3. FastAPI Intelligence & Voice Backend
+```bash
+cd fastapi
+python -m venv venv
+source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+pip install -r requirements.txt
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+# FastAPI service runs at: http://localhost:8000
+```
+
+### 4. Testing Voice Endpoints with curl
+```bash
+# Health check
+curl http://localhost:8000/api/voice/health
+
+# Flow 1: Voice Q&A (Accepts 16kHz mono WAV, returns synthesized WAV audio)
+curl -X POST http://localhost:8000/api/voice/query \
+  -F "audio=@sample_query.wav" \
+  -o response_query.wav
+
+# Flow 2: Voice-Explained Risk Briefing (Extracts SHAP factors, explains in plain speech)
+curl -X POST http://localhost:8000/api/voice/risk-briefing \
+  -F "audio=@sample_risk.wav" \
+  -o response_risk.wav
+```
+
+### 5. Instant Demo Credentials
+Use the built-in Sandbox Role Switcher in the top bar or sign in with:
+- **Super Admin**: `admin@shivfurniture.com` / `Admin@123`
+- **Procurement**: `purchase@shivfurniture.com` / `Purchase@123`
+- **Sales Executive**: `sales@shivfurniture.com` / `Sales@123`
+- **Inventory Manager**: `inventory@shivfurniture.com` / `Inventory@123`
+- **Product Manager**: `pm@shivfurniture.com` / `Pm@123`
 
 ---
 
