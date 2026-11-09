@@ -107,10 +107,12 @@ Question:
 Tool Result:
 {state.get('tool_output', 'No result')}
 
-Generate an ERP answer.
-Be concise.
-Give recommendations.
-If the Tool Result contains structured priorities (like 'Today's Priorities'), present it clearly in markdown format.
+Generate a direct ERP answer.
+CRITICAL INSTRUCTION:
+- Give ONLY the direct answer.
+- DO NOT start with "ChainIQ reply for your question", "In response to your question", or repeat the user's question back.
+- Be concise and actionable.
+- If the Tool Result contains structured priorities (like 'Today's Priorities'), present it clearly in markdown format.
 """
     
     response = llm.invoke([HumanMessage(content=prompt)])

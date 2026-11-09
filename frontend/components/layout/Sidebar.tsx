@@ -31,6 +31,7 @@ import {
   Bell,
   LineChart,
   Cpu,
+  Mic,
 } from 'lucide-react';
 
 const SECTIONS = [
@@ -63,6 +64,7 @@ const SECTIONS = [
     items: [
       { name: 'Overview', path: '/onchain-insights', icon: Radar, roles: ['admin', 'purchase'] },
       { name: 'AI Models & Webhook Tower', path: '/onchain-insights/agents', icon: Cpu, roles: ['admin', 'purchase', 'product_manager'] },
+      { name: 'Gnani Voice Intelligence', path: '/onchain-insights/voice-intelligence', icon: Mic, roles: ['admin', 'purchase', 'product_manager', 'sales', 'inventory'] },
       { name: 'Disruptions & Shipments', path: '/onchain-insights/disruptions', icon: Radio, roles: ['admin', 'purchase', 'inventory'] },
       { name: 'Supplier Qualification', path: '/onchain-insights/suppliers', icon: ShieldCheck, roles: ['admin', 'purchase'] },
       { name: 'Onboarding & Review', path: '/onchain-insights/suppliers/onboard/queue', icon: UserPlus, roles: ['admin', 'purchase'] },

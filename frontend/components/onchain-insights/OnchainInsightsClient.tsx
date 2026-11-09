@@ -93,8 +93,11 @@ export default function OnchainInsightsClient({ initialData }: OnchainInsightsCl
     initialData: isDefaultFilters ? initialData : undefined 
   });
 
+  // Resilient display data: prefer query data, fallback to initialData
+  const displayData = data || initialData;
+
   // --- Loading State ---
-  if (isLoading && !initialData) {
+  if (isLoading && !displayData) {
     return (
       <div className="space-y-6 p-6 animate-pulse">
         <div className="flex justify-between items-center">
@@ -121,14 +124,14 @@ export default function OnchainInsightsClient({ initialData }: OnchainInsightsCl
     );
   }
 
-  // --- Error State ---
-  if (isError || !data) {
+  // --- Error State: Only show if neither cached nor initial data is available ---
+  if (!displayData) {
     return (
       <div className="p-12 text-center border border-rose-200/50 bg-rose-50/50 rounded-2xl max-w-xl mx-auto my-12">
         <AlertTriangle className="mx-auto text-rose-500 mb-3" size={40} />
         <h3 className="font-bold text-base text-rose-800">Failed to Load Onchain Insights</h3>
         <p className="text-xs text-rose-600 mt-1 mb-4">
-          Could not fetch supply chain intelligence data. This may be a network issue.
+          Could not fetch supply chain intelligence data. Please retry or verify connectivity.
         </p>
         <button onClick={() => refetch()} className="btn-primary bg-rose-600 hover:bg-rose-700">
           Retry
@@ -137,7 +140,7 @@ export default function OnchainInsightsClient({ initialData }: OnchainInsightsCl
     );
   }
 
-  const { kpis, disruptions, supplierRiskDistribution, shipmentRiskTrend, affectedMaterials, recommendedActions, suppliers } = data;
+  const { kpis, disruptions, supplierRiskDistribution, shipmentRiskTrend, affectedMaterials, recommendedActions, suppliers } = displayData;
 
   return (
     <div className="space-y-6 p-6 animate-slide-up">

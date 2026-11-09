@@ -4,6 +4,11 @@
 // =============================================================================
 
 import api from '@/lib/api';
+import { getMockDashboardData } from '@/lib/mock-data/onchain-insights';
+import { getMockSuppliers, getMockSupplierById, getSuppliersForComparison } from '@/lib/mock-data/onchain-insights/suppliers';
+import { calculateSwitchSimulation, DEFAULT_SWITCH_PAIRS } from '@/lib/mock-data/onchain-insights/switching';
+import { calculateSkuTransition, PRECONFIGURED_SKU_PAIRS } from '@/lib/mock-data/onchain-insights/sku-transition';
+import { getMockDisruptions, getMockDisruptionById, getMockShipments } from '@/lib/mock-data/onchain-insights/disruptions';
 import type {
   OnchainDashboardData,
   OnchainDashboardFilters,
@@ -48,74 +53,145 @@ const DATA_MODE = typeof window !== 'undefined'
 
 // --- Dashboard ---
 async function fetchDashboardMock(filters: OnchainDashboardFilters): Promise<OnchainDashboardData> {
-  const params = new URLSearchParams({
-    dateRange: filters.dateRange,
-    riskLevel: filters.riskLevel,
-    supplierId: filters.supplierId,
-  });
-  const res = await api.get<{ data: OnchainDashboardData }>(`/onchain-insights/dashboard?${params}`);
-  return res.data.data;
+  try {
+    const params = new URLSearchParams({
+      dateRange: filters.dateRange,
+      riskLevel: filters.riskLevel,
+      supplierId: filters.supplierId,
+    });
+    const res = await api.get<{ data: OnchainDashboardData }>(`/onchain-insights/dashboard?${params}`);
+    if (res?.data?.data) {
+      return res.data.data;
+    }
+  } catch (err) {
+    console.warn('[onchainInsightsApi] Dashboard API fetch failed, falling back to client mock data:', err);
+  }
+  return getMockDashboardData(filters);
 }
 
 // --- Suppliers ---
 async function fetchSuppliersMock(filters?: SupplierFilterParams): Promise<{ data: SupplierDetail[]; total: number }> {
-  const params = new URLSearchParams();
-  if (filters?.search) params.set('search', filters.search);
-  if (filters?.riskTier && filters.riskTier !== 'all') params.set('riskTier', filters.riskTier);
-  if (filters?.qualificationStatus && filters.qualificationStatus !== 'all') params.set('qualificationStatus', filters.qualificationStatus);
-  if (filters?.country && filters.country !== 'all') params.set('country', filters.country);
-  if (filters?.material && filters.material !== 'all') params.set('material', filters.material);
-  if (filters?.sortBy) params.set('sortBy', filters.sortBy);
-  if (filters?.sortOrder) params.set('sortOrder', filters.sortOrder);
+  try {
+    const params = new URLSearchParams();
+    if (filters?.search) params.set('search', filters.search);
+    if (filters?.riskTier && filters.riskTier !== 'all') params.set('riskTier', filters.riskTier);
+    if (filters?.qualificationStatus && filters.qualificationStatus !== 'all') params.set('qualificationStatus', filters.qualificationStatus);
+    if (filters?.country && filters.country !== 'all') params.set('country', filters.country);
+    if (filters?.material && filters.material !== 'all') params.set('material', filters.material);
+    if (filters?.sortBy) params.set('sortBy', filters.sortBy);
+    if (filters?.sortOrder) params.set('sortOrder', filters.sortOrder);
 
-  const res = await api.get<{ data: SupplierDetail[]; total: number }>(`/onchain-insights/suppliers?${params}`);
-  return res.data;
+    const res = await api.get<{ data: SupplierDetail[]; total: number }>(`/onchain-insights/suppliers?${params}`);
+    if (res?.data?.data) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[onchainInsightsApi] Suppliers API failed, falling back to mock suppliers:', err);
+  }
+  const mockSuppliers = getMockSuppliers(filters);
+  return { data: mockSuppliers, total: mockSuppliers.length };
 }
 
 async function fetchSupplierByIdMock(id: string): Promise<SupplierDetail> {
-  const res = await api.get<{ data: SupplierDetail }>(`/onchain-insights/suppliers/${id}`);
-  return res.data.data;
+  try {
+    const res = await api.get<{ data: SupplierDetail }>(`/onchain-insights/suppliers/${id}`);
+    if (res?.data?.data) {
+      return res.data.data;
+    }
+  } catch (err) {
+    console.warn('[onchainInsightsApi] Supplier detail API failed, falling back to mock:', err);
+  }
+  return getMockSupplierById(id) as SupplierDetail;
 }
 
 async function compareSuppliersMock(ids: string[]): Promise<SupplierDetail[]> {
-  const params = new URLSearchParams({ compare: ids.join(',') });
-  const res = await api.get<{ data: SupplierDetail[] }>(`/onchain-insights/suppliers?${params}`);
-  return res.data.data;
+  try {
+    const params = new URLSearchParams({ compare: ids.join(',') });
+    const res = await api.get<{ data: SupplierDetail[] }>(`/onchain-insights/suppliers?${params}`);
+    if (res?.data?.data) {
+      return res.data.data;
+    }
+  } catch (err) {
+    console.warn('[onchainInsightsApi] Compare suppliers API failed, falling back to mock:', err);
+  }
+  return getSuppliersForComparison(ids);
 }
 
 // --- Supplier Switching Simulator ---
 async function simulateSwitchMock(params?: Partial<SwitchSimulatorParams>): Promise<SwitchSimulationResult> {
-  const query = new URLSearchParams();
-  if (params?.currentSupplierId) query.set('current', params.currentSupplierId);
-  if (params?.alternativeSupplierId) query.set('alternative', params.alternativeSupplierId);
-  if (params?.materialName) query.set('material', params.materialName);
-  if (params?.annualVolume) query.set('volume', String(params.annualVolume));
-  if (params?.currentUnitCost) query.set('currentCost', String(params.currentUnitCost));
-  if (params?.alternativeUnitCost) query.set('altCost', String(params.alternativeUnitCost));
-  if (params?.splitRatioCurrent !== undefined) query.set('split', String(params.splitRatioCurrent));
-  if (params?.switchingCostOneTime !== undefined) query.set('switchingCost', String(params.switchingCostOneTime));
-  if (params?.transitionWeeks) query.set('transitionWeeks', String(params.transitionWeeks));
+  try {
+    const query = new URLSearchParams();
+    if (params?.currentSupplierId) query.set('current', params.currentSupplierId);
+    if (params?.alternativeSupplierId) query.set('alternative', params.alternativeSupplierId);
+    if (params?.materialName) query.set('material', params.materialName);
+    if (params?.annualVolume) query.set('volume', String(params.annualVolume));
+    if (params?.currentUnitCost) query.set('currentCost', String(params.currentUnitCost));
+    if (params?.alternativeUnitCost) query.set('altCost', String(params.alternativeUnitCost));
+    if (params?.splitRatioCurrent !== undefined) query.set('split', String(params.splitRatioCurrent));
+    if (params?.switchingCostOneTime !== undefined) query.set('switchingCost', String(params.switchingCostOneTime));
+    if (params?.transitionWeeks) query.set('transitionWeeks', String(params.transitionWeeks));
 
-  const res = await api.get<{ data: SwitchSimulationResult }>(`/onchain-insights/supplier-switch?${query}`);
-  return res.data.data;
+    const res = await api.get<{ data: SwitchSimulationResult }>(`/onchain-insights/supplier-switch?${query}`);
+    if (res?.data?.data) {
+      return res.data.data;
+    }
+  } catch (err) {
+    console.warn('[onchainInsightsApi] Supplier switch API failed, falling back to local simulation:', err);
+  }
+  const defaultPair = DEFAULT_SWITCH_PAIRS[0];
+  const switchParams: SwitchSimulatorParams = {
+    currentSupplierId: params?.currentSupplierId || defaultPair.currentSupplierId,
+    alternativeSupplierId: params?.alternativeSupplierId || defaultPair.alternativeSupplierId,
+    materialName: params?.materialName || defaultPair.materialName,
+    annualVolume: params?.annualVolume ?? defaultPair.annualVolume,
+    currentUnitCost: params?.currentUnitCost ?? defaultPair.currentUnitCost,
+    alternativeUnitCost: params?.alternativeUnitCost ?? defaultPair.alternativeUnitCost,
+    splitRatioCurrent: params?.splitRatioCurrent ?? defaultPair.splitRatioCurrent,
+    switchingCostOneTime: params?.switchingCostOneTime ?? defaultPair.switchingCostOneTime,
+    transitionWeeks: params?.transitionWeeks ?? defaultPair.transitionWeeks,
+  };
+  return calculateSwitchSimulation(switchParams);
 }
 
 // --- Task 5: SKU Transition Planning ---
 async function simulateSkuTransitionMock(params?: Partial<SkuTransitionParams>): Promise<{ data: SkuTransitionResult; presets: any[] }> {
-  const query = new URLSearchParams();
-  if (params?.oldSku) query.set('oldSku', params.oldSku);
-  if (params?.newSku) query.set('newSku', params.newSku);
-  if (params?.productName) query.set('productName', params.productName);
-  if (params?.currentOldInventory !== undefined) query.set('currentOldInventory', String(params.currentOldInventory));
-  if (params?.weeklyDemandRate !== undefined) query.set('weeklyDemandRate', String(params.weeklyDemandRate));
-  if (params?.newSkuLeadTimeWeeks !== undefined) query.set('newSkuLeadTimeWeeks', String(params.newSkuLeadTimeWeeks));
-  if (params?.unitCostOld !== undefined) query.set('unitCostOld', String(params.unitCostOld));
-  if (params?.unitCostNew !== undefined) query.set('unitCostNew', String(params.unitCostNew));
-  if (params?.holdingCostPerUnitYear !== undefined) query.set('holdingCostPerUnitYear', String(params.holdingCostPerUnitYear));
-  if (params?.salvageScrapValuePercent !== undefined) query.set('salvageScrapValuePercent', String(params.salvageScrapValuePercent));
+  try {
+    const query = new URLSearchParams();
+    if (params?.oldSku) query.set('oldSku', params.oldSku);
+    if (params?.newSku) query.set('newSku', params.newSku);
+    if (params?.productName) query.set('productName', params.productName);
+    if (params?.currentOldInventory !== undefined) query.set('currentOldInventory', String(params.currentOldInventory));
+    if (params?.weeklyDemandRate !== undefined) query.set('weeklyDemandRate', String(params.weeklyDemandRate));
+    if (params?.newSkuLeadTimeWeeks !== undefined) query.set('newSkuLeadTimeWeeks', String(params.newSkuLeadTimeWeeks));
+    if (params?.unitCostOld !== undefined) query.set('unitCostOld', String(params.unitCostOld));
+    if (params?.unitCostNew !== undefined) query.set('unitCostNew', String(params.unitCostNew));
+    if (params?.holdingCostPerUnitYear !== undefined) query.set('holdingCostPerUnitYear', String(params.holdingCostPerUnitYear));
+    if (params?.salvageScrapValuePercent !== undefined) query.set('salvageScrapValuePercent', String(params.salvageScrapValuePercent));
 
-  const res = await api.get<{ data: SkuTransitionResult; presets: any[] }>(`/onchain-insights/sku-transition?${query}`);
-  return res.data;
+    const res = await api.get<{ data: SkuTransitionResult; presets: any[] }>(`/onchain-insights/sku-transition?${query}`);
+    if (res?.data) {
+      return res.data;
+    }
+  } catch (err) {
+    console.warn('[onchainInsightsApi] SKU transition API failed, falling back to local simulation:', err);
+  }
+  const defaultPreset = PRECONFIGURED_SKU_PAIRS[0];
+  const skuParams: SkuTransitionParams = {
+    oldSku: params?.oldSku || defaultPreset.oldSku,
+    newSku: params?.newSku || defaultPreset.newSku,
+    productName: params?.productName || defaultPreset.productName,
+    currentOldInventory: params?.currentOldInventory ?? defaultPreset.currentOldInventory,
+    weeklyDemandRate: params?.weeklyDemandRate ?? defaultPreset.weeklyDemandRate,
+    newSkuLeadTimeWeeks: params?.newSkuLeadTimeWeeks ?? defaultPreset.newSkuLeadTimeWeeks,
+    unitCostOld: params?.unitCostOld ?? defaultPreset.unitCostOld,
+    unitCostNew: params?.unitCostNew ?? defaultPreset.unitCostNew,
+    holdingCostPerUnitYear: params?.holdingCostPerUnitYear ?? defaultPreset.holdingCostPerUnitYear,
+    salvageScrapValuePercent: params?.salvageScrapValuePercent ?? defaultPreset.salvageScrapValuePercent,
+  };
+  return {
+    data: calculateSkuTransition(skuParams),
+    presets: PRECONFIGURED_SKU_PAIRS,
+  };
 }
 
 // --- API Provider ---

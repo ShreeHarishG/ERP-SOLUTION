@@ -18,6 +18,7 @@ const envSchema = z.object({
   RISK_ANALYSIS_WEBHOOK_URL: z.string().optional(),
   TIER_MAPPING_WEBHOOK_URL: z.string().optional(),
   PO_CLASSIFIER_WEBHOOK_URL: z.string().optional(),
+  GNANI_API_KEY: z.string().optional(),
   FRONTEND_ORIGIN: z.string().optional(),
   REDIS_URL: z.string().optional(),
   UPSTASH_REDIS_REST_URL: z.string().optional(),

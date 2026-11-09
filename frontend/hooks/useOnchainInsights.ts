@@ -37,7 +37,9 @@ export const useOnchainInsights = () => {
       queryKey: ['onchainInsightsDashboard', filters],
       queryFn: () => onchainInsightsApi.getDashboard(filters),
       initialData: options?.initialData,
+      initialDataUpdatedAt: options?.initialData ? () => Date.now() : undefined,
       staleTime: CACHE_TIME,
+      retry: 1,
     });
   };
 

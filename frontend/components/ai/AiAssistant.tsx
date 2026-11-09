@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Sparkles, X, Lightbulb, AlertTriangle, ArrowRight, MessageSquare, Send } from 'lucide-react';
+import VoiceMicButton from '@/components/voice/VoiceMicButton';
 
 interface AiAssistantProps {
   isOpen: boolean;
@@ -273,9 +274,21 @@ export const AiAssistant: React.FC<AiAssistantProps> = ({ isOpen, onClose }) => 
 
         {/* Input Form Footer */}
         <form onSubmit={handleSend} className="p-4 border-t border-surface-border bg-slate-50 flex items-center gap-2">
+          <VoiceMicButton
+            variant="compact"
+            mode="query"
+            onResult={(res) => {
+              setQuery(res.transcript);
+              setMessages((prev) => [
+                ...prev,
+                { sender: 'user', text: res.transcript },
+                { sender: 'ai', text: res.response },
+              ]);
+            }}
+          />
           <input
             type="text"
-            placeholder="Ask AI Copilot..."
+            placeholder="Ask AI Copilot or click mic..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             disabled={isTyping}
